@@ -23,55 +23,16 @@ export class RoutesProvider implements vscode.TreeDataProvider<RouteItem> {
             : 5173;
     }
 
-    /**
-     * Prompts user for search input and filters routes
-     */
-    async search() {
-        const searchInput = await vscode.window.showInputBox({
-            prompt: "Search routes",
-            placeHolder: "Enter route path or name"
-        });
-
-        if (searchInput !== undefined) {
-            this.searchPattern = searchInput.toLowerCase();
-            this.refresh();
-        }
+    refresh(): void {
+        this._onDidChangeTreeData.fire(undefined);
     }
 
-    /**
-     * Clears current search filter
-     */
-    clearSearch() {
-        this.searchPattern = '';
-        this.refresh();
-    }
-
-    /**
-     * Filters routes based on search pattern
-     */
-    private filterRoutes(routes: RouteItem[]): RouteItem[] {
-        if (!this.searchPattern) { return routes; }
-
-        return routes.filter(route => {
-            const matchesSearch =
-                route.label.toLowerCase().includes(this.searchPattern) ||
-                route.routePath.toLowerCase().includes(this.searchPattern);
-
-            if (route.children.length > 0) {
-                route.children = this.filterRoutes(route.children);
-                return route.children.length > 0 || matchesSearch;
-            }
-
-            return matchesSearch;
-        });
+    getTreeItem(element: RouteItem): vscode.TreeItem {
+        return element;
     }
 
     getPort(): number {
         return this.port;
-    }
-
-    refresh(): void {
-        this._onDidChangeTreeData.fire(undefined);
     }
 
     toggleViewType(): void {
@@ -80,13 +41,6 @@ export class RoutesProvider implements vscode.TreeDataProvider<RouteItem> {
         this.refresh();
     }
 
-    getTreeItem(element: RouteItem): vscode.TreeItem {
-        return element;
-    }
-
-    /**
-     * Gets children for tree view
-     */
     async getChildren(element?: RouteItem): Promise<RouteItem[]> {
         const workspaceFolders = vscode.workspace.workspaceFolders;
         if (!workspaceFolders) { return []; }
@@ -111,84 +65,67 @@ export class RoutesProvider implements vscode.TreeDataProvider<RouteItem> {
         return this.filterRoutes(element.children || []);
     }
 
-    /**
-   * Parses reset information from a page file name
-   * Returns null if it's not a reset page
-   */
-    private parseResetInfo(fileName: string, currentPath: string): ResetInfo | null {
-        const resetMatch = fileName.match(/\+page@([^.]+)?\.svelte$/);
-        if (!resetMatch) { return null; }
-
-        const resetTarget = resetMatch[1] || '';  // Empty string means root
-
-        // Split the current path into segments
-        const pathSegments = currentPath
-            .split('/')
-            .filter(Boolean)
-            .map(segment => this.stripGroupPrefix(segment));
-
-        if (resetTarget === '') {
-            return {
-                resetTarget: '',
-                displayName: 'root',
-                layoutLevel: pathSegments.length
-            };
+    private buildRoutesTree(dir: string, basePath: string): RouteItem[] {
+        const entries = fs.readdirSync(dir).filter(file => !file.startsWith("."));
+        const routes: RouteItem[] = [];
+    
+        entries.sort((a, b) => this.compareRoutes(a, b));
+    
+        for (const entry of entries) {
+            const fullPath = path.join(dir, entry);
+            const stat = fs.statSync(fullPath);
+    
+            if (stat.isDirectory()) {
+                const routePath = path.join(basePath, entry);
+                const routeType = this.determineRouteType(entry);
+                const pageInfo = this.findPageInfo(fullPath);
+                const children = this.buildRoutesTree(fullPath, routePath);
+    
+                // Only add the route if it has a page file or is a group
+                if (pageInfo.filePath || routeType === 'group') {
+                    routes.push(new RouteItem(
+                        routePath,
+                        routePath,
+                        pageInfo.filePath,
+                        children,
+                        this.port,
+                        routeType,
+                        !this.flatView,
+                        pageInfo.resetInfo
+                    ));
+                } else {
+                    // If no page file, just add children without creating intermediate route
+                    routes.push(...children);
+                }
+            }
         }
-
-        // Find the target layout level
-        const targetIndex = pathSegments.findIndex(segment =>
-            this.normalizeSegment(segment) === this.normalizeSegment(resetTarget)
-        );
-
-        if (targetIndex === -1) {
-            console.warn(`Reset target "${resetTarget}" not found in path ${currentPath}`);
-            return null;
+    
+        return routes;
+    }
+    
+    private determineRouteType(entry: string): RouteType {
+        if (entry.startsWith('(') && entry.endsWith(')')) {
+            return 'group';
         }
-
-        return {
-            resetTarget,
-            displayName: resetTarget,
-            layoutLevel: pathSegments.length - targetIndex - 1
-        };
+        if (entry.startsWith('[...') && entry.endsWith(']')) {
+            return 'rest';
+        }
+        if (entry.startsWith('[[') && entry.endsWith(']]')) {
+            return 'optional';
+        }
+        if (entry.startsWith('[') && entry.endsWith(']')) {
+            return 'dynamic';
+        }
+        return 'static';
     }
 
-    /**
-     * Strips group prefix from segment if present
-     */
-    private stripGroupPrefix(segment: string): string {
-        return segment.replace(/^\((.*?)\)/, '');
-    }
-
-    /**
-     * Normalizes segment for comparison
-     * Handles dynamic params, groups, etc.
-     */
-    private normalizeSegment(segment: string): string {
-        // Remove group parentheses
-        segment = this.stripGroupPrefix(segment);
-
-        // Handle dynamic parameters
-        if (segment.startsWith('[') && segment.endsWith(']')) {
-            // Extract param name without constraints
-            segment = segment.replace(/\[([^\]=]+)(=.+)?\]/, '$1');
-        }
-
-        return segment;
-    }
-
-    /**
-     * Finds the appropriate page file and its reset level
-     */
-    private findPageInfo(dir: string, currentPath: string): {
-        filePath: string;
-        resetInfo: ResetInfo | null;
-    } {
+    private findPageInfo(dir: string): { filePath: string; resetInfo: ResetInfo | null } {
         const files = fs.readdirSync(dir);
 
         // Check for reset pages first
         for (const file of files) {
             if (file.includes('+page@')) {
-                const resetInfo = this.parseResetInfo(file, currentPath);
+                const resetInfo = this.parseResetInfo(file);
                 if (resetInfo) {
                     return {
                         filePath: path.join(dir, file),
@@ -198,7 +135,7 @@ export class RoutesProvider implements vscode.TreeDataProvider<RouteItem> {
             }
         }
 
-        // Fall back to regular page
+        // Check for regular page
         const regularPage = files.find(f => f === '+page.svelte');
         if (regularPage) {
             return {
@@ -213,245 +150,204 @@ export class RoutesProvider implements vscode.TreeDataProvider<RouteItem> {
         };
     }
 
+    private parseResetInfo(fileName: string): ResetInfo | null {
+        const match = fileName.match(/\+page@(.*)\.svelte$/);
+        if (!match) { return null; }
 
-    /**
-  * Builds route tree with advanced routing support
-  */
-    private buildRoutesTree(dir: string, basePath: string): RouteItem[] {
-        const entries = fs.readdirSync(dir).filter(file => !file.startsWith("."));
-        const routes: RouteItem[] = [];
-        const processedRoutes = new Set<string>();
-
-        entries.sort((a, b) => this.compareRoutes(a, b));
-
-        for (const entry of entries) {
-            const fullPath = path.join(dir, entry);
-            const stat = fs.statSync(fullPath);
-
-            const isGroup = entry.startsWith('(') && entry.endsWith(')');
-            const routePath = isGroup
-                ? basePath
-                : RouteUtils.normalizeRouteName(path.join(basePath, RouteUtils.formatRouteName(entry)));
-
-            if (processedRoutes.has(routePath)) { continue; }
-            processedRoutes.add(routePath);
-
-            if (stat.isDirectory()) {
-                const children = this.buildRoutesTree(fullPath, routePath);
-                const routeType = this.determineRouteType(entry, fullPath);
-
-                // Find page information including reset details
-                const { filePath, resetInfo } = this.findPageInfo(fullPath, routePath);
-                const hasPage = filePath !== '';
-
-                if (hasPage || children.length > 0) {
-                    const displayName = this.formatDisplayName(entry, resetInfo);
-
-                    routes.push(new RouteItem(
-                        displayName,
-                        routePath,
-                        filePath,
-                        children,
-                        this.port,
-                        routeType,
-                        !this.flatView,
-                        resetInfo
-                    ));
-                }
-            }
-        }
-
-        return routes;
+        const resetTarget = match[1] || 'root';
+        return {
+            resetTarget,
+            displayName: resetTarget || 'root',
+            layoutLevel: 0  // This will be calculated based on path depth
+        };
     }
 
-    /**
-    * Compares routes according to SvelteKit's ranking system
-    */
+    private flattenRoutes(routes: RouteItem[]): RouteItem[] {
+        const routeGroups = new Map<string, RouteItem[]>();
+
+        const processRoute = (item: RouteItem) => {
+            const segments = item.routePath.split('\\');
+            const topLevel = segments[0] || 'root';
+
+            if (!routeGroups.has(topLevel)) {
+                routeGroups.set(topLevel, []);
+            }
+
+            // Add the route with its full path
+            let displayName = item.routePath;
+            if (item.resetInfo) {
+                displayName += ` (resets to ${item.resetInfo.displayName})`;
+            }
+
+            routeGroups.get(topLevel)?.push(new RouteItem(
+                displayName,
+                item.routePath,
+                item.filePath,
+                [],
+                this.port,
+                item.routeType,
+                false,
+                item.resetInfo
+            ));
+
+            // Process children
+            if (item.children.length > 0) {
+                item.children.forEach(child => processRoute(child));
+            }
+        };
+
+        routes.forEach(route => processRoute(route));
+
+        // Create final flat list with dividers
+        const flatList: RouteItem[] = [];
+        const sortedGroups = Array.from(routeGroups.keys()).sort();
+
+        sortedGroups.forEach(section => {
+            // Add section divider
+            flatList.push(new RouteItem(
+                `━━━━━ ${section} ━━━━━`,
+                '',
+                '',
+                [],
+                this.port,
+                'divider'
+            ));
+
+            // Add routes for this section
+            flatList.push(...(routeGroups.get(section) || []));
+        });
+
+        return flatList;
+    }
+
     private compareRoutes(a: string, b: string): number {
-        // 1. Static segments win over dynamic segments
+        // Static segments win over dynamic segments
         const aIsDynamic = a.includes('[');
         const bIsDynamic = b.includes('[');
         if (!aIsDynamic && bIsDynamic) { return -1; }
         if (aIsDynamic && !bIsDynamic) { return 1; }
 
-        // 2. Parameters with matchers win over those without
-        const aHasMatcher = a.includes('=');
-        const bHasMatcher = b.includes('=');
-        if (aHasMatcher && !bHasMatcher) { return -1; }
-        if (!aHasMatcher && bHasMatcher) { return 1; }
+        // Rest/optional parameters have lowest priority
+        const aIsSpecial = a.startsWith('[...') || a.startsWith('[[');
+        const bIsSpecial = b.startsWith('[...') || b.startsWith('[[');
+        if (!aIsSpecial && bIsSpecial) { return -1; }
+        if (aIsSpecial && !bIsSpecial) { return 1; }
 
-        // 3. Rest and optional parameters have lowest priority
-        const aIsRestOrOptional = a.startsWith('[...') || a.startsWith('[[');
-        const bIsRestOrOptional = b.startsWith('[...') || b.startsWith('[[');
-        if (!aIsRestOrOptional && bIsRestOrOptional) { return -1; }
-        if (aIsRestOrOptional && !bIsRestOrOptional) { return 1; }
-
-        // 4. Return 0 for ties to keep original order
         return 0;
     }
 
-
-    /**
-   * formatDisplayName to include reset information
-   */
-    private formatDisplayName(entry: string, resetInfo: ResetInfo | null): string {
-        let displayName = this.basicFormatDisplayName(entry);
-
-        if (resetInfo) {
-            displayName += ` (resets to ${resetInfo.displayName})`;
-        }
-
-        return displayName;
-    }
-
-
-    /**
-   * Basic display name formatting
-     */
-    private basicFormatDisplayName(entry: string): string {
-        // Remove group parentheses
-        if (entry.startsWith('(') && entry.endsWith(')')) {
-            return entry.slice(1, -1) + ' (group)';
-        }
-
-        // Handle rest parameters
-        if (entry.startsWith('[...') && entry.endsWith(']')) {
-            return `*${entry.slice(4, -1)}`;
-        }
-
-        // Handle optional parameters
-        if (entry.startsWith('[[') && entry.endsWith(']]')) {
-            return `?${entry.slice(2, -2)}`;
-        }
-
-        // Handle parameters with matchers
-        if (entry.includes('=')) {
-            const [param, matcher] = entry.slice(1, -1).split('=');
-            return `${param} (${matcher})`;
-        }
-
-        // Handle regular parameters
-        if (entry.startsWith('[') && entry.endsWith(']')) {
-            return entry.slice(1, -1);
-        }
-
-        return entry;
-    }
-
-
-    /**
-     * Flattens route tree into list with dividers
-     */
-    private flattenRoutes(routes: RouteItem[]): RouteItem[] {
-        // Create a map to store routes by their top-level segment
-        const routeGroups = new Map<string, RouteItem[]>();
-        
-        const getTopLevelSegment = (path: string): string => {
-            // Remove leading colon if present
-            const segments = path.split('\\').filter(Boolean);
-            return segments[0] || 'root';
-        };
-    
-        // First pass: organize routes into groups
-        const organizeRoutes = (items: RouteItem[]) => {
-            items.forEach(item => {
-                const segment = getTopLevelSegment(item.routePath);
-                
-                if (!routeGroups.has(segment)) {
-                    routeGroups.set(segment, []);
-                }
-                
-                routeGroups.get(segment)?.push(new RouteItem(
-                    item.routePath,
-                    item.routePath,
-                    item.filePath,
-                    [],
-                    this.port,
-                    item.routeType
-                ));
-    
-                if (item.children.length > 0) {
-                    organizeRoutes(item.children);
-                }
-            });
-        };
-    
-        organizeRoutes(routes);
-    
-        // Second pass: create flat list with dividers
-        const flatList: RouteItem[] = [];
-        const sortedGroups = Array.from(routeGroups.keys()).sort();
-    
-        sortedGroups.forEach((groupName, index) => {
-            // Add divider for each group (except possibly root)
-            if (groupName !== 'root') {
-                flatList.push(new RouteItem(
-                    `━━━━━ ${groupName} ━━━━━`,  // Make divider more visible
-                    '',
-                    '',
-                    [],
-                    this.port,
-                    'divider'
-                ));
-            }
-    
-            // Add all routes for this group
-            const groupRoutes = routeGroups.get(groupName) || [];
-            flatList.push(...groupRoutes);
+    async search() {
+        const searchInput = await vscode.window.showInputBox({
+            prompt: "Search routes",
+            placeHolder: "Enter route path or name"
         });
-    
-        return flatList;
+
+        if (searchInput !== undefined) {
+            this.searchPattern = searchInput.toLowerCase();
+            this.refresh();
+        }
+    }
+
+    clearSearch() {
+        this.searchPattern = '';
+        this.refresh();
+    }
+
+    private filterRoutes(routes: RouteItem[]): RouteItem[] {
+        if (!this.searchPattern) {
+            return routes;
+        }
+
+        return routes.filter(route => {
+            // Don't filter dividers
+            if (route.routeType === 'divider') {
+                return true;
+            }
+
+            const matchesSearch = route.label.toLowerCase().includes(this.searchPattern) ||
+                route.routePath.toLowerCase().includes(this.searchPattern);
+
+            if (route.children.length > 0) {
+                route.children = this.filterRoutes(route.children);
+                return route.children.length > 0 || matchesSearch;
+            }
+
+            return matchesSearch;
+        });
+    }
+
+    private formatRoutePath(path: string, type: RouteType): string {
+        const segments = path.split('\\');
+        return segments.map(segment => {
+            // Handle rest parameters [...param]
+            if (segment.startsWith('[...') && segment.endsWith(']')) {
+                return `*${segment.slice(4, -1)}`;
+            }
+            // Handle optional parameters [[param]]
+            if (segment.startsWith('[[') && segment.endsWith(']]')) {
+                return `?${segment.slice(2, -2)}`;
+            }
+            // Handle dynamic parameters [param]
+            if (segment.startsWith('[') && segment.endsWith(']')) {
+                return segment.slice(1, -1);
+            }
+            // Handle groups (group)
+            if (segment.startsWith('(') && segment.endsWith(')')) {
+                return segment;
+            }
+            return segment;
+        }).join('\\');
+    }
+
+    private getRouteDescription(type: RouteType): string {
+        switch (type) {
+            case 'dynamic':
+                return '[dynamic]';
+            case 'rest':
+                return '[rest]';
+            case 'optional':
+                return '[optional]';
+            case 'error':
+                return '[error]';
+            case 'layout':
+                return '[layout]';
+            case 'group':
+                return '[group]';
+            default:
+                return '[page]';
+        }
     }
 
     /**
-      * Determines route type from file/folder name
-      */
-    private determineRouteType(entry: string, fullPath: string): RouteType {
-        // Check for error pages first
-        if (entry === '+error.svelte' || entry.endsWith('/+error.svelte')) {
-            return 'error';
-        }
-        // Then check for groups
-        if (entry.startsWith('(') && entry.endsWith(')')) {
-            return 'group';
-        }
-        // Then layouts
-        if (entry.includes('+layout')) {
-            return 'layout';
-        }
-        // Then dynamic routes
-        if (entry.startsWith('[...')) {
-            return 'rest';
-        }
-        if (entry.startsWith('[[')) {
-            return 'optional';
-        }
-        if (entry.startsWith('[')) {
-            return 'dynamic';
-        }
-        return 'static';
-    }
-
-    /**
-     * Opens route file from URL or path input
+     * Opens a route in the editor
      */
-    async openRoute(input: string) {
-        const relativePath = input.replace(/^(http:\/\/localhost(:\d+)?|\/)/, '');
-        const routeFile = await this.findMatchingRoute(relativePath);
+    async openRoute(input: string | RouteItem) {
+        if (typeof input === 'string') {
+            // Handle string input (URL or path)
+            const relativePath = input.replace(/^(http:\/\/localhost(:\d+)?|\/)/, '');
+            const routeFile = await this.findMatchingRoute(relativePath);
 
-        if (routeFile) {
-            vscode.window.showTextDocument(vscode.Uri.file(routeFile));
+            if (routeFile) {
+                const document = await vscode.workspace.openTextDocument(routeFile);
+                await vscode.window.showTextDocument(document);
+            } else {
+                vscode.window.showErrorMessage(`No matching route found for: ${input}`);
+            }
         } else {
-            vscode.window.showErrorMessage(`No matching route found for: ${input}`);
+            // Handle RouteItem input
+            if (input.filePath) {
+                const document = await vscode.workspace.openTextDocument(input.filePath);
+                await vscode.window.showTextDocument(document);
+            }
         }
     }
 
     /**
-     * Finds matching route file for given path
-     */
+ * Finds matching route file for given path
+ */
     private async findMatchingRoute(relativePath: string): Promise<string | null> {
         const workspaceFolders = vscode.workspace.workspaceFolders;
-        if (!workspaceFolders) { return null; }
+        if (!workspaceFolders) {return null;}
 
         const routesDir = path.join(workspaceFolders[0].uri.fsPath, "src", "routes");
         const segments = relativePath.split('/').filter(Boolean);
@@ -483,5 +379,15 @@ export class RoutesProvider implements vscode.TreeDataProvider<RouteItem> {
 
         const pagePath = path.join(currentDir, '+page.svelte');
         return fs.existsSync(pagePath) ? pagePath : null;
+    }
+
+    /**
+     * Opens a route in the browser
+     */
+    openInBrowser(route: RouteItem) {
+        if (route.routePath) {
+            const url = `http://localhost:${this.port}${route.routePath.replace(/\\/g, '/')}`;
+            vscode.env.openExternal(vscode.Uri.parse(url));
+        }
     }
 }
