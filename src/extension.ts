@@ -1,26 +1,73 @@
-// The module 'vscode' contains the VS Code extensibility API
-// Import the module and reference it with the alias vscode in your code below
 import * as vscode from 'vscode';
+import { RoutesProvider } from './providers/routesProvider';
+import { RouteItem } from './models/routeItem';
 
-// This method is called when your extension is activated
-// Your extension is activated the very first time the command is executed
 export function activate(context: vscode.ExtensionContext) {
+  // Initialize the routes provider
+  const routesProvider = new RoutesProvider();
 
-	// Use the console to output diagnostic information (console.log) and errors (console.error)
-	// This line of code will only be executed once when your extension is activated
-	console.log('Congratulations, your extension "svelte-radar" is now active!');
+  // Create the tree view
+  const treeView = vscode.window.createTreeView('routesView', {
+    treeDataProvider: routesProvider,
+    showCollapseAll: true
+  });
 
-	// The command has been defined in the package.json file
-	// Now provide the implementation of the command with registerCommand
-	// The commandId parameter must match the command field in package.json
-	const disposable = vscode.commands.registerCommand('svelte-radar.helloWorld', () => {
-		// The code you place here will be executed every time your command is executed
-		// Display a message box to the user
-		vscode.window.showInformationMessage('Hello World from Svelte Radar!');
-	});
+  // Register commands
+  const commands = [
+    {
+      command: 'svelteRadar.openRoute',
+      callback: async () => {
+        const input = await vscode.window.showInputBox({
+          prompt: "Enter a URL or relative route path",
+          placeHolder: "/dashboard/profile"
+        });
+        if (input) {
+          routesProvider.openRoute(input);
+        }
+      }
+    },
+    {
+      command: 'svelteRadar.refreshRoutes',
+      callback: () => routesProvider.refresh()
+    },
+    {
+      command: 'svelteRadar.toggleViewType',
+      callback: () => routesProvider.toggleViewType()
+    },
+    {
+      command: 'svelteRadar.search',
+      callback: () => routesProvider.search()
+    },
+    {
+      command: 'svelteRadar.clearSearch',
+      callback: () => routesProvider.clearSearch()
+    },
+    {
+      command: 'svelteRadar.openInBrowser',
+      callback: (route: RouteItem) => {
+        if (route.routeType !== 'divider') {
+          const port = routesProvider.getPort();
+          const url = `http://localhost:${port}/${route.routePath}`;
+          vscode.env.openExternal(vscode.Uri.parse(url));
+        }
+      }
+    },
+    {
+      command: 'svelteRadar.openFile',
+      callback: (route: RouteItem) => {
+        if (route.routeType !== 'divider' && route.filePath) {
+          vscode.window.showTextDocument(vscode.Uri.file(route.filePath));
+        }
+      }
+    }
+  ];
 
-	context.subscriptions.push(disposable);
+  // Register all commands
+  commands.forEach(({ command, callback }) => {
+    context.subscriptions.push(
+      vscode.commands.registerCommand(command, callback)
+    );
+  });
 }
 
-// This method is called when your extension is deactivated
 export function deactivate() {}
