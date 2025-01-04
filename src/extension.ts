@@ -53,7 +53,12 @@ export function activate(context: vscode.ExtensionContext) {
 			callback: (route: RouteItem) => {
 				if (route.routeType !== 'divider') {
 					const port = routesProvider.getPort();
-					const url = `http://localhost:${port}/${route.routePath}`;
+					// Use browserPath instead of routePath
+					const cleanPath = route.browserPath
+						.replace(/\\/g, '/')
+						.replace(/^\([^)]+\)\//, '')  // Remove root level group
+						.replace(/\/\([^)]+\)\//g, '/'); // Remove nested groups
+					const url = `http://localhost:${port}/${cleanPath}`;
 					vscode.env.openExternal(vscode.Uri.parse(url));
 				}
 			}
