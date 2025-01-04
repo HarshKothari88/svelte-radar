@@ -1,4 +1,4 @@
-export type RouteType = 'static' | 'dynamic' | 'rest' | 'optional' | 'error' | 'layout' | 'divider' | 'group';
+export type RouteType = 'static' | 'dynamic' | 'rest' | 'optional' | 'error' | 'layout' | 'divider' | 'group' | 'matcher';
 
 export interface RouteColors {
     static: string;
@@ -12,4 +12,15 @@ export interface ResetInfo {
     resetTarget: string;  // The target layout to reset to
     displayName: string;  // How to display this in the UI
     layoutLevel: number;  // How many levels up to go
+}
+
+export interface RouteMatch {
+    nextPath: string;
+    remainingSegments: string[];
+    score: number;
+}
+
+export interface SegmentMatch {
+    remainingSegments: string[];
+    score: number;
 }
