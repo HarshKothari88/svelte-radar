@@ -206,9 +206,6 @@ export class RoutesProvider implements vscode.TreeDataProvider<RouteItem> {
 
             // Add the route with its full path
             let displayName = item.routePath;
-            if (item.resetInfo) {
-                displayName += ` (resets to ${item.resetInfo.displayName})`;
-            }
 
             routeGroups.get(topLevel)?.push(new RouteItem(
                 displayName,
