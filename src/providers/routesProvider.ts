@@ -304,48 +304,6 @@ export class RoutesProvider implements vscode.TreeDataProvider<RouteItem> {
         });
     }
 
-    private formatRoutePath(path: string, type: RouteType): string {
-        const segments = path.split('\\');
-        return segments.map(segment => {
-            // Handle rest parameters [...param]
-            if (segment.startsWith('[...') && segment.endsWith(']')) {
-                return `*${segment.slice(4, -1)}`;
-            }
-            // Handle optional parameters [[param]]
-            if (segment.startsWith('[[') && segment.endsWith(']]')) {
-                return `?${segment.slice(2, -2)}`;
-            }
-            // Handle dynamic parameters [param]
-            if (segment.startsWith('[') && segment.endsWith(']')) {
-                return segment.slice(1, -1);
-            }
-            // Handle groups (group)
-            if (segment.startsWith('(') && segment.endsWith(')')) {
-                return segment;
-            }
-            return segment;
-        }).join('\\');
-    }
-
-    private getRouteDescription(type: RouteType): string {
-        switch (type) {
-            case 'dynamic':
-                return '[dynamic]';
-            case 'rest':
-                return '[rest]';
-            case 'optional':
-                return '[optional]';
-            case 'error':
-                return '[error]';
-            case 'layout':
-                return '[layout]';
-            case 'group':
-                return '[group]';
-            default:
-                return '[page]';
-        }
-    }
-
     /**
      * Opens a route in the editor
      */
