@@ -3,7 +3,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { RouteItem } from '../models/routeItem';
 import { RouteUtils } from '../utils/routeUtils';
-import { ResetInfo, RouteType } from '../constant/type';
+import { ResetInfo, RouteMatch, RouteType, SegmentMatch } from '../constant/type';
 
 /**
  * Provider class for managing SvelteKit routes in VS Code
@@ -14,8 +14,10 @@ export class RoutesProvider implements vscode.TreeDataProvider<RouteItem> {
     private port: number;
     private flatView: boolean;
     private searchPattern: string = '';
+    private testRoot?: string;
 
-    constructor() {
+    constructor(testRoot?: string) {
+        this.testRoot = testRoot;
         this.flatView = vscode.workspace.getConfiguration('svelteRadar').get('viewType', 'flat') === 'flat';
         const workspaceFolders = vscode.workspace.workspaceFolders;
         this.port = workspaceFolders
@@ -39,6 +41,20 @@ export class RoutesProvider implements vscode.TreeDataProvider<RouteItem> {
         this.flatView = !this.flatView;
         vscode.workspace.getConfiguration('svelteRadar').update('viewType', this.flatView ? 'flat' : 'hierarchical', true);
         this.refresh();
+    }
+
+    // Helper method to get routes directory
+    private getRoutesDir(): string {
+        if (this.testRoot) {
+            return path.join(this.testRoot, 'src', 'routes');
+        }
+
+        const workspaceFolders = vscode.workspace.workspaceFolders;
+        if (!workspaceFolders) {
+            throw new Error('No workspace folder found');
+        }
+
+        return path.join(workspaceFolders[0].uri.fsPath, 'src', 'routes');
     }
 
     async getChildren(element?: RouteItem): Promise<RouteItem[]> {
@@ -68,19 +84,19 @@ export class RoutesProvider implements vscode.TreeDataProvider<RouteItem> {
     private buildRoutesTree(dir: string, basePath: string): RouteItem[] {
         const entries = fs.readdirSync(dir).filter(file => !file.startsWith("."));
         const routes: RouteItem[] = [];
-    
+
         entries.sort((a, b) => this.compareRoutes(a, b));
-    
+
         for (const entry of entries) {
             const fullPath = path.join(dir, entry);
             const stat = fs.statSync(fullPath);
-    
+
             if (stat.isDirectory()) {
                 const routePath = path.join(basePath, entry);
                 const routeType = this.determineRouteType(entry);
                 const pageInfo = this.findPageInfo(fullPath);
                 const children = this.buildRoutesTree(fullPath, routePath);
-    
+
                 // Only add the route if it has a page file or is a group
                 if (pageInfo.filePath || routeType === 'group') {
                     routes.push(new RouteItem(
@@ -99,10 +115,10 @@ export class RoutesProvider implements vscode.TreeDataProvider<RouteItem> {
                 }
             }
         }
-    
+
         return routes;
     }
-    
+
     private determineRouteType(entry: string): RouteType {
         if (entry.startsWith('(') && entry.endsWith(')')) {
             return 'group';
@@ -323,18 +339,38 @@ export class RoutesProvider implements vscode.TreeDataProvider<RouteItem> {
      */
     async openRoute(input: string | RouteItem) {
         if (typeof input === 'string') {
-            // Handle string input (URL or path)
-            const relativePath = input.replace(/^(http:\/\/localhost(:\d+)?|\/)/, '');
-            const routeFile = await this.findMatchingRoute(relativePath);
+            let relativePath: string;
 
-            if (routeFile) {
-                const document = await vscode.workspace.openTextDocument(routeFile);
-                await vscode.window.showTextDocument(document);
-            } else {
-                vscode.window.showErrorMessage(`No matching route found for: ${input}`);
+            try {
+                // Handle both URLs and direct paths
+                if (input.includes('://')) {
+                    const url = new URL(input);
+                    relativePath = url.pathname;
+                } else {
+                    // Handle paths that might start with / or not
+                    relativePath = input.startsWith('/') ? input.slice(1) : input;
+                }
+
+                // Remove trailing slash if present
+                relativePath = relativePath.replace(/\/$/, '');
+
+                // Handle empty path (root route)
+                if (!relativePath) {
+                    relativePath = '/';
+                }
+
+                const routeFile = await this.findMatchingRoute(relativePath);
+
+                if (routeFile) {
+                    const document = await vscode.workspace.openTextDocument(routeFile);
+                    await vscode.window.showTextDocument(document);
+                } else {
+                    vscode.window.showErrorMessage(`No matching route found for: ${input}`);
+                }
+            } catch (error) {
+                vscode.window.showErrorMessage(`Invalid route or URL format: ${input}`);
             }
         } else {
-            // Handle RouteItem input
             if (input.filePath) {
                 const document = await vscode.workspace.openTextDocument(input.filePath);
                 await vscode.window.showTextDocument(document);
@@ -345,40 +381,166 @@ export class RoutesProvider implements vscode.TreeDataProvider<RouteItem> {
     /**
  * Finds matching route file for given path
  */
-    private async findMatchingRoute(relativePath: string): Promise<string | null> {
-        const workspaceFolders = vscode.workspace.workspaceFolders;
-        if (!workspaceFolders) {return null;}
+    async findMatchingRoute(relativePath: string): Promise<string | null> {
+        const routesDir = this.getRoutesDir();
 
-        const routesDir = path.join(workspaceFolders[0].uri.fsPath, "src", "routes");
-        const segments = relativePath.split('/').filter(Boolean);
-        let currentDir = routesDir;
-
-        for (const segment of segments) {
-            const entries = fs.readdirSync(currentDir);
-
-            // Try exact match first
-            const exactMatch = entries.find(entry => entry === segment || entry === `[${segment}]`);
-            if (exactMatch) {
-                currentDir = path.join(currentDir, exactMatch);
-                continue;
-            }
-
-            // Try dynamic route match
-            const dynamicMatch = entries.find(entry =>
-                (entry.startsWith('[') && entry.endsWith(']')) ||
-                (entry.startsWith('[...') && entry.endsWith(']'))
-            );
-
-            if (dynamicMatch) {
-                currentDir = path.join(currentDir, dynamicMatch);
-                continue;
-            }
-
-            return null;
+        // Handle root path
+        if (relativePath === '/' || relativePath === '') {
+            return this.findMostSpecificPage(routesDir);
         }
 
-        const pagePath = path.join(currentDir, '+page.svelte');
-        return fs.existsSync(pagePath) ? pagePath : null;
+        const segments = relativePath.split('/').filter(Boolean);
+        return this.findMatchingSegments(routesDir, segments);
+    }
+
+    private async findMatchingSegments(currentDir: string, segments: string[]): Promise<string | null> {
+        if (segments.length === 0) {
+            // For optional parameters, we need to look one level deeper even with no segments
+            const entries = await fs.promises.readdir(currentDir);
+            for (const entry of entries) {
+                if (entry.startsWith('[[') && entry.endsWith(']]')) {
+                    const fullPath = path.join(currentDir, entry);
+                    const optionalMatch = await this.findMostSpecificPage(fullPath);
+                    if (optionalMatch) {return optionalMatch;}
+                }
+            }
+            return this.findMostSpecificPage(currentDir);
+        }
+    
+        const currentSegment = segments[0];
+        const entries = await fs.promises.readdir(currentDir);
+        let bestMatch: string | null = null;
+        let bestScore = -1;
+    
+        // First pass: Check for exact and matcher routes
+        for (const entry of entries) {
+            const fullPath = path.join(currentDir, entry);
+            if (!(await fs.promises.stat(fullPath)).isDirectory()) {continue;}
+    
+            const routeType = this.getRouteType(entry);
+            let match: string | null = null;
+            let score = 0;
+    
+            if (routeType === 'static' && entry === currentSegment) {
+                match = await this.findMatchingSegments(fullPath, segments.slice(1));
+                score = 100;
+            } else if (routeType === 'matcher') {
+                // Only match if the parameter constraint is satisfied
+                if (this.isParameterMatchGeneric(currentSegment, entry)) {
+                    match = await this.findMatchingSegments(fullPath, segments.slice(1));
+                    score = 90;
+                }
+            }
+    
+            if (match && score > bestScore) {
+                bestMatch = match;
+                bestScore = score;
+            }
+        }
+    
+        // If no match found yet, try other routes
+        if (!bestMatch) {
+            for (const entry of entries) {
+                const fullPath = path.join(currentDir, entry);
+                if (!(await fs.promises.stat(fullPath)).isDirectory()) {continue;}
+    
+                const routeType = this.getRouteType(entry);
+                let match: string | null = null;
+                let score = 0;
+    
+                switch(routeType) {
+                    case 'group':
+                        match = await this.findMatchingSegments(fullPath, segments);
+                        if (match) {score = 95;}
+                        break;
+                    case 'dynamic':
+                        match = await this.findMatchingSegments(fullPath, segments.slice(1));
+                        score = 80;
+                        break;
+                    case 'optional':
+                        match = await this.findMatchingSegments(fullPath, segments.slice(1));
+                        if (match) {
+                            score = 70;
+                        } else {
+                            match = await this.findMatchingSegments(fullPath, segments);
+                            if (match) {score = 60;}
+                        }
+                        break;
+                    case 'rest':
+                        match = await this.findMostSpecificPage(fullPath);
+                        score = 50;
+                        break;
+                }
+    
+                if (match && score > bestScore) {
+                    bestMatch = match;
+                    bestScore = score;
+                }
+            }
+        }
+    
+        return bestMatch;
+    }
+
+    private findMostSpecificPage(dir: string): string | null {
+        if (!fs.existsSync(dir)) {return null;}
+
+        const files = fs.readdirSync(dir);
+
+        // Check for all possible page/server files
+        const filePriorities = [
+            (f: string) => f.match(/\+page@\([^)]+\)\.svelte$/), // Layout reset with target
+            (f: string) => f === '+page@.svelte',                 // Root layout reset
+            (f: string) => f === '+server.js',                    // Server route
+            (f: string) => f === '+page.svelte'                   // Regular page
+        ];
+
+        for (const checkPriority of filePriorities) {
+            const matchingFile = files.find(checkPriority);
+            if (matchingFile) {
+                return path.join(dir, matchingFile);
+            }
+        }
+
+        return null;
+    }
+
+    private isParameterMatchGeneric(value: string, paramPattern: string): boolean {
+        const matcherMatch = paramPattern.match(/\[([^=]+)=([^\]]+)\]/);
+        if (!matcherMatch) {
+            return false;
+        }
+
+        const [, paramName, matcher] = matcherMatch;
+        const patterns: { [key: string]: RegExp } = {
+            integer: /^\d+$/,
+            float: /^\d*\.?\d+$/,
+            alpha: /^[a-zA-Z]+$/,
+            alphanumeric: /^[a-zA-Z0-9]+$/,
+            uuid: /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+            date: /^\d{4}-\d{2}-\d{2}$/
+        };
+
+        return patterns[matcher] ? patterns[matcher].test(value) : true;
+    }
+
+    private getRouteType(entry: string): RouteType {
+        if (entry.startsWith('(') && entry.endsWith(')')) {
+            return 'group';
+        }
+        if (!entry.includes('[')) {
+            return 'static';
+        }
+        if (entry.startsWith('[[') && entry.endsWith(']]')) {
+            return 'optional';
+        }
+        if (entry.startsWith('[...')) {
+            return 'rest';
+        }
+        if (entry.includes('[') && entry.includes('=')) {
+            return 'matcher';
+        }
+        return 'dynamic';
     }
 
     /**
