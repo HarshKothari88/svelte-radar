@@ -54,7 +54,7 @@ export function activate(context: vscode.ExtensionContext) {
 				if (route.routeType !== 'divider') {
 					const port = routesProvider.getPort();
 					// Use browserPath instead of routePath
-					const cleanPath = route.browserPath
+					const cleanPath = route.routePath
 						.replace(/\\/g, '/')
 						.replace(/^\([^)]+\)\//, '')  // Remove root level group
 						.replace(/\/\([^)]+\)\//g, '/'); // Remove nested groups
