@@ -236,7 +236,7 @@ export class RoutesProvider implements vscode.TreeDataProvider<RouteItem> {
         sortedGroups.forEach(section => {
             // Add section divider
             flatList.push(new RouteItem(
-                `━━━━━ ${section} ━━━━━`,
+                section,
                 '',
                 '',
                 [],
