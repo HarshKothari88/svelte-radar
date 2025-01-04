@@ -84,38 +84,53 @@ export class RoutesProvider implements vscode.TreeDataProvider<RouteItem> {
     private buildRoutesTree(dir: string, basePath: string): RouteItem[] {
         const entries = fs.readdirSync(dir).filter(file => !file.startsWith("."));
         const routes: RouteItem[] = [];
-
+    
         entries.sort((a, b) => this.compareRoutes(a, b));
-
+    
         for (const entry of entries) {
             const fullPath = path.join(dir, entry);
             const stat = fs.statSync(fullPath);
-
+    
             if (stat.isDirectory()) {
                 const routePath = path.join(basePath, entry);
                 const routeType = this.determineRouteType(entry);
                 const pageInfo = this.findPageInfo(fullPath);
                 const children = this.buildRoutesTree(fullPath, routePath);
-
-                // Only add the route if it has a page file or is a group
-                if (pageInfo.filePath || routeType === 'group') {
-                    routes.push(new RouteItem(
-                        routePath,
-                        routePath,
-                        pageInfo.filePath,
-                        children,
-                        this.port,
-                        routeType,
-                        !this.flatView,
-                        pageInfo.resetInfo
-                    ));
-                } else {
-                    // If no page file, just add children without creating intermediate route
+    
+                if (this.flatView) {
+                    // In flat view, only add the route if it has a page file
+                    if (pageInfo.filePath) {
+                        routes.push(new RouteItem(
+                            routePath,
+                            routePath,
+                            pageInfo.filePath,
+                            [], // Empty children array in flat view
+                            this.port,
+                            routeType,
+                            false,
+                            pageInfo.resetInfo
+                        ));
+                    }
+                    // Add all children regardless
                     routes.push(...children);
+                } else {
+                    // In hierarchical view
+                    if (pageInfo.filePath || routeType === 'group' || children.length > 0) {
+                        routes.push(new RouteItem(
+                            routePath,
+                            routePath,
+                            pageInfo.filePath,
+                            children,
+                            this.port,
+                            routeType,
+                            true,
+                            pageInfo.resetInfo
+                        ));
+                    }
                 }
             }
         }
-
+    
         return routes;
     }
 
@@ -401,26 +416,26 @@ export class RoutesProvider implements vscode.TreeDataProvider<RouteItem> {
                 if (entry.startsWith('[[') && entry.endsWith(']]')) {
                     const fullPath = path.join(currentDir, entry);
                     const optionalMatch = await this.findMostSpecificPage(fullPath);
-                    if (optionalMatch) {return optionalMatch;}
+                    if (optionalMatch) { return optionalMatch; }
                 }
             }
             return this.findMostSpecificPage(currentDir);
         }
-    
+
         const currentSegment = segments[0];
         const entries = await fs.promises.readdir(currentDir);
         let bestMatch: string | null = null;
         let bestScore = -1;
-    
+
         // First pass: Check for exact and matcher routes
         for (const entry of entries) {
             const fullPath = path.join(currentDir, entry);
-            if (!(await fs.promises.stat(fullPath)).isDirectory()) {continue;}
-    
+            if (!(await fs.promises.stat(fullPath)).isDirectory()) { continue; }
+
             const routeType = this.getRouteType(entry);
             let match: string | null = null;
             let score = 0;
-    
+
             if (routeType === 'static' && entry === currentSegment) {
                 match = await this.findMatchingSegments(fullPath, segments.slice(1));
                 score = 100;
@@ -431,27 +446,27 @@ export class RoutesProvider implements vscode.TreeDataProvider<RouteItem> {
                     score = 90;
                 }
             }
-    
+
             if (match && score > bestScore) {
                 bestMatch = match;
                 bestScore = score;
             }
         }
-    
+
         // If no match found yet, try other routes
         if (!bestMatch) {
             for (const entry of entries) {
                 const fullPath = path.join(currentDir, entry);
-                if (!(await fs.promises.stat(fullPath)).isDirectory()) {continue;}
-    
+                if (!(await fs.promises.stat(fullPath)).isDirectory()) { continue; }
+
                 const routeType = this.getRouteType(entry);
                 let match: string | null = null;
                 let score = 0;
-    
-                switch(routeType) {
+
+                switch (routeType) {
                     case 'group':
                         match = await this.findMatchingSegments(fullPath, segments);
-                        if (match) {score = 95;}
+                        if (match) { score = 95; }
                         break;
                     case 'dynamic':
                         match = await this.findMatchingSegments(fullPath, segments.slice(1));
@@ -463,7 +478,7 @@ export class RoutesProvider implements vscode.TreeDataProvider<RouteItem> {
                             score = 70;
                         } else {
                             match = await this.findMatchingSegments(fullPath, segments);
-                            if (match) {score = 60;}
+                            if (match) { score = 60; }
                         }
                         break;
                     case 'rest':
@@ -471,19 +486,19 @@ export class RoutesProvider implements vscode.TreeDataProvider<RouteItem> {
                         score = 50;
                         break;
                 }
-    
+
                 if (match && score > bestScore) {
                     bestMatch = match;
                     bestScore = score;
                 }
             }
         }
-    
+
         return bestMatch;
     }
 
     private findMostSpecificPage(dir: string): string | null {
-        if (!fs.existsSync(dir)) {return null;}
+        if (!fs.existsSync(dir)) { return null; }
 
         const files = fs.readdirSync(dir);
 
