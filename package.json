@@ -63,7 +63,7 @@
         {
           "id": "svelte-radar",
           "title": "Svelte Radar",
-          "icon": "$(file-code)"
+          "icon": "media/svelte_radar_icon.svg"
         }
       ]
     },
