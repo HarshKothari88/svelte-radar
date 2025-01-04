@@ -66,6 +66,9 @@ export class RouteItem extends vscode.TreeItem {
             // ignoring the private constructor error here
             // @ts-ignore
             this.iconPath = new vscode.ThemeIcon(icon, new vscode.ThemeColor(color));
+            // ignoring the private constructor error here
+            // @ts-ignore
+            this.iconPath = new vscode.ThemeIcon(icon, new vscode.ThemeColor(color));
 
             this.command = {
                 command: 'svelteRadar.openFile',
