@@ -2,11 +2,38 @@
   "name": "svelte-radar",
   "displayName": "Svelte Radar",
   "description": "Svelte Radar is a powerful Visual Studio Code extension designed to streamline your SvelteKit development experience. It provides a visual overview of your project's routing structure, helping you navigate complex route hierarchies with ease.",
-  "version": "0.0.1",
+  "author": "Harsh Kothari",
+  "repository": "https://github.com/HarshKothari88/svelte-radar",
+  "publisher": "harshkothari",
+  "license": "MIT",
+  "homepage": "https://github.com/HarshKothari88/svelte-radar#readme",
+  "icon": "media/svelte_radar_icon.png",
+  "keywords": [
+    "svelte",
+    "sveltekit",
+    "routes",
+    "routing",
+    "navigation",
+    "file-tree",
+    "route-visualization",
+    "developer-tools",
+    "vscode-extension",
+    "preview",
+    "web-development",
+    "file-explorer",
+    "path-navigation",
+    "layout",
+    "reset-layouts",
+    "parameter-matcher"
+  ],
+  "version": "1.0.0",
   "engines": {
     "vscode": "^1.96.0"
   },
   "categories": [
+    "Programming Languages",
+    "Snippets",
+    "Visualization",
     "Other"
   ],
   "activationEvents": [
