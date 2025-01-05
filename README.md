@@ -1,3 +1,4 @@
+![svelte_radar_icon](https://github.com/user-attachments/assets/d3a53754-60ce-4c3c-8f1b-770e8f64cfb9)
 
 # Svelte Radar
 
