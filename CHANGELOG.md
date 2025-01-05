@@ -1,9 +1,28 @@
 # Change Log
 
-All notable changes to the "svelte-radar" extension will be documented in this file.
+All notable changes to the "Svelte Radar" extension will be documented in this file.
 
-Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
+## [1.0.0] - 2024-01-05
 
-## [Unreleased]
-
+### Added
 - Initial release
+- Route visualization in hierarchical and flat views
+- Support for all SvelteKit route types:
+  - Static routes
+  - Dynamic parameters
+  - Rest parameters
+  - Optional parameters
+  - Parameter matchers
+  - Group layouts
+  - Layout resets
+- Automatic port detection from config files
+- Quick navigation via URL/path input
+- Route search functionality
+- Browser preview integration
+- Built-in parameter matchers:
+  - integer
+  - float
+  - alpha
+  - alphanumeric
+  - uuid
+  - date
