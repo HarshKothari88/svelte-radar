@@ -1,71 +1,102 @@
-# svelte-radar README
+![svelte_radar_icon](https://github.com/user-attachments/assets/d3a53754-60ce-4c3c-8f1b-770e8f64cfb9)
 
-This is the README for your extension "svelte-radar". After writing up a brief description, we recommend including the following sections.
+# Svelte Radar
+
+Svelte Radar is a Visual Studio Code extension designed to streamline your SvelteKit development experience. It provides a visual overview of your project's routing structure, helping you navigate complex route hierarchies with ease.
 
 ## Features
 
-Describe specific features of your extension including screenshots of your extension in action. Image paths are relative to this README file.
+- **Route Visualization**: View all your SvelteKit routes in a hierarchical or flat structure
+- **Smart Route Detection**: Automatically detects and displays all types of SvelteKit routes:
+  - Static routes
+  - Dynamic parameters ([param])
+  - Rest parameters ([...param])
+  - Optional parameters ([[param]])
+  - Parameter matchers ([param=matcher])
+  - Group layouts ((group))
+  - Layout resets (+page@.svelte)
+  
+- **Quick Navigation**: Jump to route files directly from the sidebar
+- **Preview in Browser**: Open any route in your default browser with one click
+- **Route Search**: Quickly find routes with the built-in search functionality
+- **Auto Port Detection**: Automatically detects your dev server port from configuration files
 
-For example if there is an image subfolder under your extension project workspace:
+## Usage
 
-\!\[feature X\]\(images/feature-x.png\)
+### Visual Navigation
 
-> Tip: Many popular extensions utilize animations. This is an excellent way to show off your extension! We recommend short, focused animations that are easy to follow.
+The extension adds a radar icon to your activity bar. Click it to see your project's routes.
 
-## Requirements
+### Smart Route Navigation
 
-If you have any requirements or dependencies, add a section describing those and how to install and configure them.
+Press `Cmd/Ctrl + Shift + P` and type "Svelte Radar: Open Route", You can enter:
 
-## Extension Settings
+ - Full URLs (example):
+	 - http://localhost:5173/blog/how-to-use-sveltekit/comments
+	 - https://myapp.com/shop/products/1234/reviews/foo/bar
+ - You can also use relative paths
+	 - /login 
+	 - /dashboard/setings
+ - Opens:
+	 - /blog/[slug]/comments/+page.svelte
+	  - /products/[id=integer]/reviews/[...rest]/+page.svelte
+	  - /(auth)/login/+page.svelte
+	  - /dashboard/(admin)/settings/+page@(auth).svelte
 
-Include if your extension adds any VS Code settings through the `contributes.configuration` extension point.
+Examples:
 
-For example:
+1. Complex nested dynamic route with parameter matcher:
+/products/[id=integer]/variants/[sku=alphanumeric]/reviews/[...page]/+page.svelte
+2. Grouped route with layout reset:
+/(shop)/products/[category]/items/+page@(shop).svelte
+3. Optional parameters with groups:
+/(docs)/[[lang]]/api/[[version]]/reference/+page.svelte
 
-This extension contributes the following settings:
+### Route Types at a Glance
 
-* `myExtension.enable`: Enable/disable this extension.
-* `myExtension.thing`: Set to `blah` to do something.
+- 🟢 Static Routes (/about, /contact)
+- 🔵 Dynamic Parameters (/blog/[slug])
+- 🟣 Rest Parameters (/blog/[...slug])
+- 🟡 Optional Parameters (/docs/[[lang]])
+- 🟠 Group Routes (/(auth)/login)
+- 🟤 Parameter Matchers (/user/[id=integer])
 
-## Known Issues
+### Parameter Matchers
+ The extension supports the following built-in parameter matchers: - 
+ - **integer**: Matches whole numbers
+ /products/[id=integer] // matches: /products/123
+ - **float**: Matches decimal numbers
+ /products/[price=float] // matches: /products/99.99
+ - **alpha**: Matches alphabetic characters
+/users/[name=alpha] // matches: /users/john
+- **alphanumeric**: Matches letters and numbers
+/posts/[slug=alphanumeric] // matches: /posts/post123
+- **uuid**: Matches UUID format
+/users/[id=uuid] // matches: /users/123e4567-e89b-12d3-a456-426614174000
+- **date**: Matches YYYY-MM-DD format
+/events/[date=date] // matches: /events/2024-01-05
+- **Custom matchers** are also supported and will always match:
+/products/[id=customMatcher] // matches any value
+ 
+ 
 
-Calling out known issues can help limit users opening duplicate issues against your extension.
+## Configuration
 
-## Release Notes
+```json
+{
+"svelteRadar.devServerPort": 5173,
+"svelteRadar.viewType": "flat"
+}
+```
+`svelteRadar.devServerPort` : Custom development server port. Only needed if we can't automatically detect it from your svelte.config.js, vite.config.js, or vite.config.ts.
 
-Users appreciate release notes as you update your extension.
+`svelteRadar.viewType` : Default view type ("flat" or "hierarchical")
 
-### 1.0.0
+## Flat View:
 
-Initial release of ...
+![image](https://github.com/user-attachments/assets/937ee134-2ee1-4be4-9dd8-77b97eed1f3f)
 
-### 1.0.1
+## Hierarchical View
 
-Fixed issue #.
+![image](https://github.com/user-attachments/assets/64d36548-9af6-4ca5-a5f1-04f58e5b83f9)
 
-### 1.1.0
-
-Added features X, Y, and Z.
-
----
-
-## Following extension guidelines
-
-Ensure that you've read through the extensions guidelines and follow the best practices for creating your extension.
-
-* [Extension Guidelines](https://code.visualstudio.com/api/references/extension-guidelines)
-
-## Working with Markdown
-
-You can author your README using Visual Studio Code. Here are some useful editor keyboard shortcuts:
-
-* Split the editor (`Cmd+\` on macOS or `Ctrl+\` on Windows and Linux).
-* Toggle preview (`Shift+Cmd+V` on macOS or `Shift+Ctrl+V` on Windows and Linux).
-* Press `Ctrl+Space` (Windows, Linux, macOS) to see a list of Markdown snippets.
-
-## For more information
-
-* [Visual Studio Code's Markdown Support](http://code.visualstudio.com/docs/languages/markdown)
-* [Markdown Syntax Reference](https://help.github.com/articles/markdown-basics/)
-
-**Enjoy!**
