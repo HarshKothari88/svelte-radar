@@ -1,4 +1,6 @@
-export type RouteType = 'static' | 'dynamic' | 'rest' | 'optional' | 'error' | 'layout' | 'divider' | 'group' | 'matcher';
+export type RouteType = 'static' | 'dynamic' | 'rest' | 'optional' | 'error' | 'layout' | 'divider' | 'group' | 'matcher' | 'spacer';
+
+export type FileType = 'page' | 'server' | 'layout' | 'error' | 'pageServer' | 'layoutServer' | 'pageClient' | 'layoutClient';
 
 export interface RouteColors {
     static: string;
@@ -23,4 +25,10 @@ export interface RouteMatch {
 export interface SegmentMatch {
     remainingSegments: string[];
     score: number;
+}
+
+export interface RouteFileInfo {
+    filePath: string;
+    fileType: FileType;
+    resetInfo: ResetInfo | null;
 }

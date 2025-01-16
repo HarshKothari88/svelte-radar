@@ -3,7 +3,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { RouteItem } from '../models/routeItem';
 import { RouteUtils } from '../utils/routeUtils';
-import { ResetInfo, RouteMatch, RouteType, SegmentMatch } from '../constant/type';
+import { ResetInfo, RouteFileInfo, RouteMatch, RouteType, SegmentMatch } from '../constant/type';
 
 /**
  * Provider class for managing SvelteKit routes in VS Code
@@ -84,53 +84,91 @@ export class RoutesProvider implements vscode.TreeDataProvider<RouteItem> {
     private buildRoutesTree(dir: string, basePath: string): RouteItem[] {
         const entries = fs.readdirSync(dir).filter(file => !file.startsWith("."));
         const routes: RouteItem[] = [];
-    
+
         entries.sort((a, b) => this.compareRoutes(a, b));
-    
+
+        // Process root level files
+        if (!basePath) {
+            const fileInfos = this.findPageInfo(dir);
+            for (const fileInfo of fileInfos) {
+                routes.push(new RouteItem(
+                    '/',
+                    '/',
+                    fileInfo.filePath,
+                    [],
+                    this.port,
+                    'static',
+                    !this.flatView, // Use hierarchical view flag
+                    fileInfo.resetInfo,
+                    fileInfo.fileType
+                ));
+            }
+        }
+
+        // Process directories
         for (const entry of entries) {
             const fullPath = path.join(dir, entry);
             const stat = fs.statSync(fullPath);
-    
+
             if (stat.isDirectory()) {
                 const routePath = path.join(basePath, entry);
                 const routeType = this.determineRouteType(entry);
-                const pageInfo = this.findPageInfo(fullPath);
+                const dirFileInfos = this.findPageInfo(fullPath);
                 const children = this.buildRoutesTree(fullPath, routePath);
-    
+
                 if (this.flatView) {
-                    // In flat view, only add the route if it has a page file
-                    if (pageInfo.filePath) {
+                    // Flat view logic remains unchanged
+                    for (const fileInfo of dirFileInfos) {
                         routes.push(new RouteItem(
                             routePath,
                             routePath,
-                            pageInfo.filePath,
-                            [], // Empty children array in flat view
+                            fileInfo.filePath,
+                            [],
                             this.port,
                             routeType,
                             false,
-                            pageInfo.resetInfo
+                            fileInfo.resetInfo,
+                            fileInfo.fileType
                         ));
                     }
-                    // Add all children regardless
                     routes.push(...children);
                 } else {
-                    // In hierarchical view
-                    if (pageInfo.filePath || routeType === 'group' || children.length > 0) {
-                        routes.push(new RouteItem(
+                    // Enhanced hierarchical view logic
+                    const routeFiles: RouteItem[] = [];
+
+                    // Add all directory files as direct children
+                    for (const fileInfo of dirFileInfos) {
+                        routeFiles.push(new RouteItem(
+                            path.basename(fileInfo.filePath),
                             routePath,
-                            routePath,
-                            pageInfo.filePath,
-                            children,
+                            fileInfo.filePath,
+                            [],
                             this.port,
                             routeType,
                             true,
-                            pageInfo.resetInfo
+                            fileInfo.resetInfo,
+                            fileInfo.fileType
+                        ));
+                    }
+
+                    // Create directory node with all children
+                    if (routeFiles.length > 0 || children.length > 0) {
+                        routes.push(new RouteItem(
+                            entry,
+                            routePath,
+                            dirFileInfos[0]?.filePath || '',
+                            [...routeFiles, ...children],
+                            this.port,
+                            routeType,
+                            true,
+                            dirFileInfos[0]?.resetInfo || null,
+                            dirFileInfos[0]?.fileType || 'page'
                         ));
                     }
                 }
             }
         }
-    
+
         return routes;
     }
 
@@ -150,35 +188,88 @@ export class RoutesProvider implements vscode.TreeDataProvider<RouteItem> {
         return 'static';
     }
 
-    private findPageInfo(dir: string): { filePath: string; resetInfo: ResetInfo | null } {
+    private findPageInfo(dir: string): RouteFileInfo[] {
         const files = fs.readdirSync(dir);
+        const fileInfos: RouteFileInfo[] = [];
 
-        // Check for reset pages first
+        // Check each file in the directory
         for (const file of files) {
+            // Skip non-route files
+            if (!file.startsWith('+')) {
+                continue;
+            }
+
+            // Check for reset pages first
             if (file.includes('+page@')) {
                 const resetInfo = this.parseResetInfo(file);
-                if (resetInfo) {
-                    return {
-                        filePath: path.join(dir, file),
-                        resetInfo
-                    };
-                }
+                fileInfos.push({
+                    filePath: path.join(dir, file),
+                    fileType: 'page',
+                    resetInfo
+                });
+                continue;
+            }
+
+            // Determine file type
+            if (file.startsWith('+page.svelte')) {
+                fileInfos.push({
+                    filePath: path.join(dir, file),
+                    fileType: 'page',
+                    resetInfo: null
+                });
+            }
+            else if (file.startsWith('+page.ts')) {
+                fileInfos.push({
+                    filePath: path.join(dir, file),
+                    fileType: 'pageClient',
+                    resetInfo: null
+                });
+            }
+            else if (file.startsWith('+page.server.ts')) {
+                fileInfos.push({
+                    filePath: path.join(dir, file),
+                    fileType: 'pageServer',
+                    resetInfo: null
+                });
+            }
+            else if (file.startsWith('+server.ts')) {
+                fileInfos.push({
+                    filePath: path.join(dir, file),
+                    fileType: 'server',
+                    resetInfo: null
+                });
+            }
+            else if (file.startsWith('+layout.svelte')) {
+                fileInfos.push({
+                    filePath: path.join(dir, file),
+                    fileType: 'layout',
+                    resetInfo: null
+                });
+            }
+            else if (file.startsWith('+layout.ts')) {
+                fileInfos.push({
+                    filePath: path.join(dir, file),
+                    fileType: 'layoutClient',
+                    resetInfo: null
+                });
+            }
+            else if (file.startsWith('+layout.server.ts')) {
+                fileInfos.push({
+                    filePath: path.join(dir, file),
+                    fileType: 'layoutServer',
+                    resetInfo: null
+                });
+            }
+            else if (file.startsWith('+error.svelte')) {
+                fileInfos.push({
+                    filePath: path.join(dir, file),
+                    fileType: 'error',
+                    resetInfo: null
+                });
             }
         }
 
-        // Check for regular page
-        const regularPage = files.find(f => f === '+page.svelte');
-        if (regularPage) {
-            return {
-                filePath: path.join(dir, regularPage),
-                resetInfo: null
-            };
-        }
-
-        return {
-            filePath: '',
-            resetInfo: null
-        };
+        return fileInfos;
     }
 
     private parseResetInfo(fileName: string): ResetInfo | null {
@@ -195,20 +286,38 @@ export class RoutesProvider implements vscode.TreeDataProvider<RouteItem> {
 
     private flattenRoutes(routes: RouteItem[]): RouteItem[] {
         const routeGroups = new Map<string, RouteItem[]>();
+        let lastSubDirectory = '';
 
         const processRoute = (item: RouteItem) => {
             const segments = item.routePath.split('\\');
             const topLevel = segments[0] || 'root';
 
+            // Get the subdirectory if it exists (e.g., 'test/about', 'test/blog')
+            const subDir = segments.length > 1 ? segments.slice(0, 2).join('/') : '';
+
             if (!routeGroups.has(topLevel)) {
                 routeGroups.set(topLevel, []);
             }
 
-            // Add the route with its full path
-            let displayName = item.routePath;
+            // Add spacer if we're switching to a new subdirectory
+            if (subDir && subDir !== lastSubDirectory && lastSubDirectory !== '') {
+                routeGroups.get(topLevel)?.push(new RouteItem(
+                    '',
+                    '',
+                    '',
+                    [],
+                    this.port,
+                    'spacer'
+                ));
+            }
 
+            if (subDir) {
+                lastSubDirectory = subDir;
+            }
+
+            // Add the route with its full path
             routeGroups.get(topLevel)?.push(new RouteItem(
-                displayName,
+                item.routePath,
                 item.routePath,
                 item.filePath,
                 [],
@@ -249,19 +358,40 @@ export class RoutesProvider implements vscode.TreeDataProvider<RouteItem> {
     }
 
     private compareRoutes(a: string, b: string): number {
-        // Static segments win over dynamic segments
-        const aIsDynamic = a.includes('[');
-        const bIsDynamic = b.includes('[');
-        if (!aIsDynamic && bIsDynamic) { return -1; }
-        if (aIsDynamic && !bIsDynamic) { return 1; }
+        const sortingType = vscode.workspace.getConfiguration('svelteRadar').get<'natural' | 'basic'>('sortingType', 'natural');
 
-        // Rest/optional parameters have lowest priority
-        const aIsSpecial = a.startsWith('[...') || a.startsWith('[[');
-        const bIsSpecial = b.startsWith('[...') || b.startsWith('[[');
-        if (!aIsSpecial && bIsSpecial) { return -1; }
-        if (aIsSpecial && !bIsSpecial) { return 1; }
+        // Helper to get route type priority
+        const getRoutePriority = (route: string): number => {
+            const segment = route.split('/').pop() || '';
 
-        return 0;
+            // Check if it's a special parameter first (rest/optional)
+            const isSpecial = segment.startsWith('[...') || segment.startsWith('[[');
+            if (isSpecial) {
+                if (segment.startsWith('[...')) { return 0; }  // rest parameters (lowest)
+                if (segment.startsWith('[[')) { return 1; }    // optional parameters
+            }
+
+            // Then handle static vs dynamic
+            const isDynamic = segment.includes('[');
+            if (isDynamic) { return 2; }  // dynamic parameters
+            return 3;  // static routes (highest)
+        };
+
+        // Compare route types first
+        const aPriority = getRoutePriority(a);
+        const bPriority = getRoutePriority(b);
+
+        if (aPriority !== bPriority) {
+            return bPriority - aPriority;  // Higher priority comes first
+        }
+
+        // For routes of same type, use selected sorting method
+        if (sortingType === 'natural') {
+            return RouteUtils.naturalSort(a, b);
+        }
+
+        // Default string comparison
+        return a.localeCompare(b);
     }
 
     async search() {

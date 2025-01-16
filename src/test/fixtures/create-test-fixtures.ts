@@ -98,6 +98,16 @@ export async function createTestFixtures() {
         await createDir('products/[slug]');
         await createFile('products/[slug]/+page.svelte');
 
+        // Natural sorting test
+        await createDir('blog');
+        await createFile('blog/+layout.svelte');
+        await createFile('blog/1-first/+page.svelte');
+        await createFile('blog/2-second/+page.svelte');
+        await createFile('blog/10-tenth/+page.svelte');
+        await createFile('blog/[slug]/+page.svelte');
+        await createFile('blog/[[optional]]/+page.svelte');
+        await createFile('blog/[...rest]/+page.svelte');
+
 
         console.log('Test fixtures created successfully!');
         console.log('Fixtures location:', fixturesDir);

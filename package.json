@@ -83,6 +83,12 @@
         "title": "Clear Search",
         "category": "Svelte Radar",
         "icon": "$(clear-all)"
+      },
+      {
+        "command": "svelteRadar.toggleSorting",
+        "title": "Toggle Sorting Type",
+        "category": "Svelte Radar",
+        "icon": "$(sort-precedence)"
       }
     ],
     "viewsContainers": {
@@ -120,6 +126,11 @@
           "command": "svelteRadar.search",
           "when": "view == routesView",
           "group": "navigation"
+        },
+        {
+          "command": "svelteRadar.toggleSorting",
+          "when": "view == routesView",
+          "group": "navigation"
         }
       ],
       "view/item/context": [
@@ -151,6 +162,15 @@
           ],
           "default": "flat",
           "description": "Display routes in flat or hierarchical view"
+        },
+        "svelteRadar.sortingType": {
+          "type": "string",
+          "enum": [
+            "natural",
+            "basic"
+          ],
+          "default": "natural",
+          "description": "Route sorting type (natural: natural number sorting, basic: basic string comparison)"
         }
       }
     }

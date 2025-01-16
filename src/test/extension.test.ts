@@ -171,3 +171,130 @@ suite('Route Matching Test Suite', () => {
         });
     });
 });
+
+suite('Route Sorting Test Suite', () => {
+    let routesProvider: RoutesProvider;
+    let workspaceDir: string;
+
+    suiteSetup(async () => {
+        workspaceDir = path.resolve(__dirname, '../../test-fixtures');
+        routesProvider = new RoutesProvider(workspaceDir);
+    });
+
+    test('Basic sorting should maintain standard string order', async () => {
+        // Set sorting to default
+        await vscode.workspace.getConfiguration('svelteRadar').update('sortingType', 'basic', true);
+        
+        const testRoutes = [
+            'blog/1-first',
+            'blog/10-tenth',
+            'blog/2-second',
+            'blog/20-twentieth'
+        ];
+
+        // Sort using the provider's compareRoutes method
+        const sorted = testRoutes.sort((a, b) => routesProvider['compareRoutes'](a, b));
+        
+        // In default sorting, string comparison means 10 comes before 2
+        assert.deepStrictEqual(sorted, [
+            'blog/1-first',
+            'blog/10-tenth',
+            'blog/2-second',
+            'blog/20-twentieth'
+        ]);
+    });
+
+    test('Natural sorting should order numbers correctly', async () => {
+        // Set sorting to natural
+        await vscode.workspace.getConfiguration('svelteRadar').update('sortingType', 'natural', true);
+        
+        const testRoutes = [
+            'blog/1-first',
+            'blog/10-tenth',
+            'blog/2-second',
+            'blog/20-twentieth'
+        ];
+
+        // Sort using the provider's compareRoutes method
+        const sorted = testRoutes.sort((a, b) => routesProvider['compareRoutes'](a, b));
+        
+        // In natural sorting, numbers should be ordered naturally
+        assert.deepStrictEqual(sorted, [
+            'blog/1-first',
+            'blog/2-second',
+            'blog/10-tenth',
+            'blog/20-twentieth'
+        ]);
+    });
+
+    test('Route type priorities should be maintained with natural sorting', async () => {
+        // Set sorting to natural
+        await vscode.workspace.getConfiguration('svelteRadar').update('sortingType', 'natural', true);
+        
+        const testRoutes = [
+            'blog/1-first',
+            'blog/[slug]',
+            'blog/2-second', 
+            'blog/[...rest]',
+            'blog/10-tenth',
+            'blog/[[optional]]'
+        ];
+    
+        // Sort using the provider's compareRoutes method
+        const sorted = testRoutes.sort((a, b) => routesProvider['compareRoutes'](a, b));
+        
+        // Static routes first, then dynamic, then optional, then rest
+        assert.deepStrictEqual(sorted, [
+            'blog/1-first',
+            'blog/2-second',
+            'blog/10-tenth',
+            'blog/[slug]',
+            'blog/[[optional]]',
+            'blog/[...rest]'
+        ]);
+    });
+
+    test('Natural sorting should handle numbers anywhere in path', async () => {
+        await vscode.workspace.getConfiguration('svelteRadar').update('sortingType', 'natural', true);
+        
+        const testRoutes = [
+            'item10',
+            'item1',
+            'item2',
+            'path/to/page1/section10',
+            'path/to/page1/section2',
+            'article-1-draft',
+            'article-10-final',
+            'article-2-review',
+            'section5-part10',
+            'section5-part2',
+            'xyz10abc20',
+            'xyz2abc10',
+            'xyz10abc10',
+            '1article',
+            '10article',
+            '2article'
+        ];
+    
+        const sorted = testRoutes.sort((a, b) => routesProvider['compareRoutes'](a, b));
+        
+        assert.deepStrictEqual(sorted, [
+            '1article',
+            '2article',
+            '10article',
+            'article-1-draft',
+            'article-2-review',
+            'article-10-final',
+            'item1',
+            'item2',
+            'item10',
+            'path/to/page1/section2',
+            'path/to/page1/section10',
+            'section5-part2',
+            'section5-part10',
+            'xyz2abc10',
+            'xyz10abc10',
+            'xyz10abc20'
+        ]);
+    });
+});
