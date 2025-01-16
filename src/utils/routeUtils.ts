@@ -77,10 +77,33 @@ export class RouteUtils {
     }
 
     static naturalSort(a: string, b: string): number {
-        const getName = (path: string) => path.split('/').pop() || '';
-        return getName(a).localeCompare(getName(b), undefined, {
-            numeric: true,
-            sensitivity: 'base'
-        });
+        // Helper function to convert string into sortable parts
+        // It splits the string into chunks of text and numbers
+        const splitIntoPartsWithNumbers = (str: string) => {
+            return str.split(/(\d+)/).map(part => {
+                // Convert number strings to actual numbers for proper comparison
+                const num = parseInt(part);
+                return isNaN(num) ? part : num;
+            });
+        };
+    
+        // Split both paths into their components
+        const partsA = splitIntoPartsWithNumbers(a);
+        const partsB = splitIntoPartsWithNumbers(b);
+    
+        // Compare each part
+        for (let i = 0; i < Math.min(partsA.length, partsB.length); i++) {
+            if (partsA[i] !== partsB[i]) {
+                // If both parts are numbers, do numeric comparison
+                if (typeof partsA[i] === 'number' && typeof partsB[i] === 'number') {
+                    return (partsA[i] as number) - (partsB[i] as number);
+                }
+                // Otherwise do string comparison
+                return String(partsA[i]).localeCompare(String(partsB[i]));
+            }
+        }
+        
+        // If all parts match up to this point, shorter string comes first
+        return partsA.length - partsB.length;
     }
 }

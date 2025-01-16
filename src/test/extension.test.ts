@@ -253,4 +253,48 @@ suite('Route Sorting Test Suite', () => {
             'blog/[...rest]'
         ]);
     });
+
+    test('Natural sorting should handle numbers anywhere in path', async () => {
+        await vscode.workspace.getConfiguration('svelteRadar').update('sortingType', 'natural', true);
+        
+        const testRoutes = [
+            'item10',
+            'item1',
+            'item2',
+            'path/to/page1/section10',
+            'path/to/page1/section2',
+            'article-1-draft',
+            'article-10-final',
+            'article-2-review',
+            'section5-part10',
+            'section5-part2',
+            'xyz10abc20',
+            'xyz2abc10',
+            'xyz10abc10',
+            '1article',
+            '10article',
+            '2article'
+        ];
+    
+        const sorted = testRoutes.sort((a, b) => routesProvider['compareRoutes'](a, b));
+        
+        assert.deepStrictEqual(sorted, [
+            '1article',
+            '2article',
+            '10article',
+            'article-1-draft',
+            'article-2-review',
+            'article-10-final',
+            'item1',
+            'item2',
+            'item10',
+            'path/to/page1/section2',
+            'path/to/page1/section10',
+            'section5-part2',
+            'section5-part10',
+            'xyz2abc10',
+            'xyz10abc10',
+            'xyz10abc20'
+        ]);
+    });
 });
