@@ -12,7 +12,7 @@ export class RouteItem extends vscode.TreeItem {
         public routeType: RouteType,
         public isHierarchical: boolean = false,
         public resetInfo: ResetInfo | null = null,
-        public fileType: FileType = 'page'
+        public fileType: FileType = 'page',
     ) {
         super(
             label,
@@ -22,8 +22,8 @@ export class RouteItem extends vscode.TreeItem {
         );
 
         // Format the label and description
-        if (routeType === 'divider') {
-            this.label = this.formatDividerLabel(label);
+        if (routeType === 'divider' || routeType === 'spacer') {
+            this.label = this.formatSpecialLabel(label, routeType);
             this.description = '';
             this.contextValue = 'divider';
             this.tooltip = '';
@@ -115,10 +115,10 @@ export class RouteItem extends vscode.TreeItem {
                 title: 'Open File',
                 arguments: [this]
             };
-        }
 
-        // Enhanced tooltip
-        this.tooltip = this.getTooltipContent(routePath, routeType, resetInfo, filePath, fileType);
+            // Enhanced tooltip
+            this.tooltip = this.getTooltipContent(routePath, routeType, resetInfo, filePath, fileType);
+        }
     }
 
     private isGroupRoute(): boolean {
@@ -168,7 +168,8 @@ export class RouteItem extends vscode.TreeItem {
             layout: 'layout',
             group: 'group',
             divider: '',
-            matcher: 'matcher'
+            matcher: 'matcher',
+            spacer: ''
         };
 
         // Determine file type based on filename first
@@ -218,12 +219,16 @@ export class RouteItem extends vscode.TreeItem {
         return parts.join(' ');
     }
 
-    private formatDividerLabel(label: string): string {
-        // Check if it's a root level group
+    private formatSpecialLabel(label: string, type: RouteType): string {
+        if (type === 'spacer') {
+            return '---------------'; // Simple spacer line
+        }
+
+        // For dividers (directory or group headers)
         if (label.startsWith('(') && label.endsWith(')')) {
             const groupName = label.slice(1, -1);
-            return `─────── ${groupName} (group) ───────`;
+            return `───── ${groupName} (group) ─────`;
         }
-        return `─────── ${label} ───────`;
+        return `───── ${label === '/' ? 'root' : label} ─────`;
     }
 }

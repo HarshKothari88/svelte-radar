@@ -275,20 +275,38 @@ export class RoutesProvider implements vscode.TreeDataProvider<RouteItem> {
 
     private flattenRoutes(routes: RouteItem[]): RouteItem[] {
         const routeGroups = new Map<string, RouteItem[]>();
-
+        let lastSubDirectory = '';
+    
         const processRoute = (item: RouteItem) => {
             const segments = item.routePath.split('\\');
             const topLevel = segments[0] || 'root';
-
+            
+            // Get the subdirectory if it exists (e.g., 'test/about', 'test/blog')
+            const subDir = segments.length > 1 ? segments.slice(0, 2).join('/') : '';
+    
             if (!routeGroups.has(topLevel)) {
                 routeGroups.set(topLevel, []);
             }
-
+    
+            // Add spacer if we're switching to a new subdirectory
+            if (subDir && subDir !== lastSubDirectory && lastSubDirectory !== '') {
+                routeGroups.get(topLevel)?.push(new RouteItem(
+                    '',
+                    '',
+                    '',
+                    [],
+                    this.port,
+                    'spacer'
+                ));
+            }
+    
+            if (subDir) {
+                lastSubDirectory = subDir;
+            }
+    
             // Add the route with its full path
-            let displayName = item.routePath;
-
             routeGroups.get(topLevel)?.push(new RouteItem(
-                displayName,
+                item.routePath,
                 item.routePath,
                 item.filePath,
                 [],
@@ -297,34 +315,47 @@ export class RoutesProvider implements vscode.TreeDataProvider<RouteItem> {
                 false,
                 item.resetInfo
             ));
-
+    
             // Process children
             if (item.children.length > 0) {
                 item.children.forEach(child => processRoute(child));
             }
         };
-
+    
         routes.forEach(route => processRoute(route));
-
+    
         // Create final flat list with dividers
         const flatList: RouteItem[] = [];
         const sortedGroups = Array.from(routeGroups.keys()).sort();
-
+    
         sortedGroups.forEach(section => {
             // Add section divider
-            flatList.push(new RouteItem(
-                section,
-                '',
-                '',
-                [],
-                this.port,
-                'divider'
-            ));
-
+            if (section.startsWith('(') && section.endsWith(')')) {
+                // Group divider
+                flatList.push(new RouteItem(
+                    section.slice(1, -1),
+                    '',
+                    '',
+                    [],
+                    this.port,
+                    'divider'
+                ));
+            } else {
+                // Regular directory divider
+                flatList.push(new RouteItem(
+                    section,
+                    '',
+                    '',
+                    [],
+                    this.port,
+                    'divider'
+                ));
+            }
+    
             // Add routes for this section
             flatList.push(...(routeGroups.get(section) || []));
         });
-
+    
         return flatList;
     }
 
