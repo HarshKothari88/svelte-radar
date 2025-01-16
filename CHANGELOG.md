@@ -2,6 +2,30 @@
 
 All notable changes to the "Svelte Radar" extension will be documented in this file.
 
+## [1.0.2] - 2024-01-17
+
+### Added
+- Complete support for all SvelteKit route file types:
+  - `+page.server.ts`
+  - `+server.ts` 
+  - `+layout.svelte`
+  - `+layout.ts`
+  - `+layout.server.ts`
+  - `+error.svelte`
+- Natural sorting support with two options:
+  - Natural sorting (default) - Intelligently sorts number-containing routes
+  - Basic sorting - Standard string comparison
+
+### Improved
+- Enhanced UI organization with sub-directory dividers for better route visualization
+- Better route grouping and hierarchy display
+- More intuitive navigation through complex route structures
+
+### Fixed
+- Critical bug preventing root-level file scanning
+- Route sorting issues with numbered prefixes/suffixes
+- Various route matching edge cases
+
 ## [1.0.1] - 2024-01-08
 
 ### Fixed

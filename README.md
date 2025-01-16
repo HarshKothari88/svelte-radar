@@ -6,20 +6,36 @@ Svelte Radar is a Visual Studio Code extension designed to streamline your Svelt
 
 ## Features
 
-- **Route Visualization**: View all your SvelteKit routes in a hierarchical or flat structure
-- **Smart Route Detection**: Automatically detects and displays all types of SvelteKit routes:
-  - Static routes
+- **Complete Route Detection**: Automatically detects and displays all SvelteKit route files:
+  - Pages (+page.svelte)
+  - Server-side logic (+page.server.ts)
+  - API endpoints (+server.ts)
+  - Layouts (+layout.svelte)
+  - Client-side logic (+layout.ts, +page.ts)
+  - Server layouts (+layout.server.ts)
+  - Error pages (+error.svelte)
+  - Group layouts (+page@.svelte)
+
+- **Smart Route Organization**:
+  - Hierarchical view for structured navigation
+  - Flat view with intelligent grouping
+  - Sub-directory dividers for better organization
+  - Natural route sorting (handles numbered routes intelligently)
+
+- **Route Type Detection**: Support for all SvelteKit routing patterns:
+  - Static routes (/about, /contact)
   - Dynamic parameters ([param])
   - Rest parameters ([...param])
   - Optional parameters ([[param]])
   - Parameter matchers ([param=matcher])
   - Group layouts ((group))
   - Layout resets (+page@.svelte)
-  
-- **Quick Navigation**: Jump to route files directly from the sidebar
-- **Preview in Browser**: Open any route in your default browser with one click
-- **Route Search**: Quickly find routes with the built-in search functionality
-- **Auto Port Detection**: Automatically detects your dev server port from configuration files
+
+- **Intuitive Navigation**:
+  - Direct file access from sidebar
+  - Browser preview integration
+  - Quick route search functionality
+  - Auto port detection from config files
 
 ## Usage
 
@@ -60,6 +76,11 @@ Examples:
 - 🟡 Optional Parameters (/docs/[[lang]])
 - 🟠 Group Routes (/(auth)/login)
 - 🟤 Parameter Matchers (/user/[id=integer])
+- 📄 Server Routes (+server.ts)
+- 🔧 Server Logic (+page.server.ts, +layout.server.ts)
+- 📱 Client Logic (+page.ts, +layout.ts)
+- 🎨 Layouts (+layout.svelte)
+- ⚠️ Error Pages (+error.svelte)
 
 ### Parameter Matchers
  The extension supports the following built-in parameter matchers: - 
@@ -85,12 +106,17 @@ Examples:
 ```json
 {
 "svelteRadar.devServerPort": 5173,
-"svelteRadar.viewType": "flat"
+"svelteRadar.viewType": "flat",
+"svelteRadar.sortingType": "natural"
 }
 ```
 `svelteRadar.devServerPort` : Custom development server port. Only needed if we can't automatically detect it from your svelte.config.js, vite.config.js, or vite.config.ts.
 
 `svelteRadar.viewType` : Default view type ("flat" or "hierarchical")
+
+`svelteRadar.sortingType` : Route sorting method ("natural" or "basic")
+	natural: Intelligently sorts numbered routes (default)
+	basic: Standard string comparison
 
 ## Flat View:
 
