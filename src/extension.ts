@@ -51,14 +51,18 @@ export function activate(context: vscode.ExtensionContext) {
 		{
 			command: 'svelteRadar.openInBrowser',
 			callback: (route: RouteItem) => {
-				if (route.routeType !== 'divider') {
+				if (route.routeType !== 'divider' && route.routePath !== 'spacer') {
 					const port = routesProvider.getPort();
-					// Use browserPath instead of routePath
 					const cleanPath = route.routePath
 						.replace(/\\/g, '/')
 						.replace(/^\([^)]+\)\//, '')  // Remove root level group
 						.replace(/\/\([^)]+\)\//g, '/'); // Remove nested groups
-					const url = `http://localhost:${port}/${cleanPath}`;
+					
+					// Handle root path specially
+					const url = cleanPath === '/' 
+						? `http://localhost:${port}/`
+						: `http://localhost:${port}/${cleanPath}`;
+						
 					vscode.env.openExternal(vscode.Uri.parse(url));
 				}
 			}
