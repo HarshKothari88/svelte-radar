@@ -70,6 +70,16 @@ export function activate(context: vscode.ExtensionContext) {
 					vscode.window.showTextDocument(vscode.Uri.file(route.filePath));
 				}
 			}
+		},
+		{
+			command: 'svelteRadar.toggleSorting',
+			callback: async () => {
+				const config = vscode.workspace.getConfiguration('svelteRadar');
+				const currentType = config.get('sortingType', 'default');
+				const newType = currentType === 'default' ? 'natural' : 'default';
+				await config.update('sortingType', newType, true);
+				routesProvider.refresh();
+			}
 		}
 	];
 
