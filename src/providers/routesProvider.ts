@@ -84,48 +84,40 @@ export class RoutesProvider implements vscode.TreeDataProvider<RouteItem> {
     private buildRoutesTree(dir: string, basePath: string): RouteItem[] {
         const entries = fs.readdirSync(dir).filter(file => !file.startsWith("."));
         const routes: RouteItem[] = [];
-    
+
         entries.sort((a, b) => this.compareRoutes(a, b));
-    
-        // Only process root files if we're at the root level
+
+        // Process root level files
         if (!basePath) {
             const fileInfos = this.findPageInfo(dir);
             for (const fileInfo of fileInfos) {
-                const routeItem = new RouteItem(
+                routes.push(new RouteItem(
                     '/',
                     '/',
                     fileInfo.filePath,
                     [],
                     this.port,
                     'static',
-                    false,
+                    !this.flatView, // Use hierarchical view flag
                     fileInfo.resetInfo,
                     fileInfo.fileType
-                );
-                
-                if (this.flatView) {
-                    routes.push(routeItem);
-                } else {
-                    if (routes.length === 0 || fileInfo.fileType === 'server') {
-                        routes.push(routeItem);
-                    }
-                }
+                ));
             }
         }
-    
+
         // Process directories
         for (const entry of entries) {
             const fullPath = path.join(dir, entry);
             const stat = fs.statSync(fullPath);
-    
+
             if (stat.isDirectory()) {
                 const routePath = path.join(basePath, entry);
                 const routeType = this.determineRouteType(entry);
-                const children = this.buildRoutesTree(fullPath, routePath);
                 const dirFileInfos = this.findPageInfo(fullPath);
-    
+                const children = this.buildRoutesTree(fullPath, routePath);
+
                 if (this.flatView) {
-                    // Add directory files
+                    // Flat view logic remains unchanged
                     for (const fileInfo of dirFileInfos) {
                         routes.push(new RouteItem(
                             routePath,
@@ -141,12 +133,31 @@ export class RoutesProvider implements vscode.TreeDataProvider<RouteItem> {
                     }
                     routes.push(...children);
                 } else {
-                    if (dirFileInfos.length > 0 || routeType === 'group' || children.length > 0) {
-                        routes.push(new RouteItem(
+                    // Enhanced hierarchical view logic
+                    const routeFiles: RouteItem[] = [];
+
+                    // Add all directory files as direct children
+                    for (const fileInfo of dirFileInfos) {
+                        routeFiles.push(new RouteItem(
+                            path.basename(fileInfo.filePath),
                             routePath,
+                            fileInfo.filePath,
+                            [],
+                            this.port,
+                            routeType,
+                            true,
+                            fileInfo.resetInfo,
+                            fileInfo.fileType
+                        ));
+                    }
+
+                    // Create directory node with all children
+                    if (routeFiles.length > 0 || children.length > 0) {
+                        routes.push(new RouteItem(
+                            entry,
                             routePath,
                             dirFileInfos[0]?.filePath || '',
-                            children,
+                            [...routeFiles, ...children],
                             this.port,
                             routeType,
                             true,
@@ -157,7 +168,7 @@ export class RoutesProvider implements vscode.TreeDataProvider<RouteItem> {
                 }
             }
         }
-    
+
         return routes;
     }
 
@@ -180,14 +191,14 @@ export class RoutesProvider implements vscode.TreeDataProvider<RouteItem> {
     private findPageInfo(dir: string): RouteFileInfo[] {
         const files = fs.readdirSync(dir);
         const fileInfos: RouteFileInfo[] = [];
-    
+
         // Check each file in the directory
         for (const file of files) {
             // Skip non-route files
             if (!file.startsWith('+')) {
                 continue;
             }
-    
+
             // Check for reset pages first
             if (file.includes('+page@')) {
                 const resetInfo = this.parseResetInfo(file);
@@ -198,7 +209,7 @@ export class RoutesProvider implements vscode.TreeDataProvider<RouteItem> {
                 });
                 continue;
             }
-    
+
             // Determine file type
             if (file.startsWith('+page.svelte')) {
                 fileInfos.push({
@@ -257,10 +268,10 @@ export class RoutesProvider implements vscode.TreeDataProvider<RouteItem> {
                 });
             }
         }
-    
+
         return fileInfos;
     }
-    
+
     private parseResetInfo(fileName: string): ResetInfo | null {
         const match = fileName.match(/\+page@(.*)\.svelte$/);
         if (!match) { return null; }
@@ -276,18 +287,18 @@ export class RoutesProvider implements vscode.TreeDataProvider<RouteItem> {
     private flattenRoutes(routes: RouteItem[]): RouteItem[] {
         const routeGroups = new Map<string, RouteItem[]>();
         let lastSubDirectory = '';
-    
+
         const processRoute = (item: RouteItem) => {
             const segments = item.routePath.split('\\');
             const topLevel = segments[0] || 'root';
-            
+
             // Get the subdirectory if it exists (e.g., 'test/about', 'test/blog')
             const subDir = segments.length > 1 ? segments.slice(0, 2).join('/') : '';
-    
+
             if (!routeGroups.has(topLevel)) {
                 routeGroups.set(topLevel, []);
             }
-    
+
             // Add spacer if we're switching to a new subdirectory
             if (subDir && subDir !== lastSubDirectory && lastSubDirectory !== '') {
                 routeGroups.get(topLevel)?.push(new RouteItem(
@@ -299,11 +310,11 @@ export class RoutesProvider implements vscode.TreeDataProvider<RouteItem> {
                     'spacer'
                 ));
             }
-    
+
             if (subDir) {
                 lastSubDirectory = subDir;
             }
-    
+
             // Add the route with its full path
             routeGroups.get(topLevel)?.push(new RouteItem(
                 item.routePath,
@@ -315,47 +326,34 @@ export class RoutesProvider implements vscode.TreeDataProvider<RouteItem> {
                 false,
                 item.resetInfo
             ));
-    
+
             // Process children
             if (item.children.length > 0) {
                 item.children.forEach(child => processRoute(child));
             }
         };
-    
+
         routes.forEach(route => processRoute(route));
-    
+
         // Create final flat list with dividers
         const flatList: RouteItem[] = [];
         const sortedGroups = Array.from(routeGroups.keys()).sort();
-    
+
         sortedGroups.forEach(section => {
             // Add section divider
-            if (section.startsWith('(') && section.endsWith(')')) {
-                // Group divider
-                flatList.push(new RouteItem(
-                    section.slice(1, -1),
-                    '',
-                    '',
-                    [],
-                    this.port,
-                    'divider'
-                ));
-            } else {
-                // Regular directory divider
-                flatList.push(new RouteItem(
-                    section,
-                    '',
-                    '',
-                    [],
-                    this.port,
-                    'divider'
-                ));
-            }
-    
+            flatList.push(new RouteItem(
+                section,
+                '',
+                '',
+                [],
+                this.port,
+                'divider'
+            ));
+
             // Add routes for this section
             flatList.push(...(routeGroups.get(section) || []));
         });
-    
+
         return flatList;
     }
 

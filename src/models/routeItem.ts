@@ -30,24 +30,8 @@ export class RouteItem extends vscode.TreeItem {
             this.command = undefined;
             this.iconPath = undefined;
         } else {
-            // For hierarchical view, keep the bare parameter name
-            if (isHierarchical) {
-                // Simpler description for hierarchical view
-                const parts: string[] = [];
-                if (this.resetInfo) {
-                    parts.push(`[resets to ${this.resetInfo.displayName.replace(/[()]/g, '')}]`);
-                }
-                const matcherMatch = this.routePath.match(/\[(\w+)=(\w+)\]/);
-                if (matcherMatch) {
-                    parts.push(`[${matcherMatch[2]}]`);
-                }
-                this.description = parts.join(' ');
-            } else {
-                // Flat view formatting remains the same
-                this.description = this.formatDescription();
-            }
-
-            this.label = this.formatDisplayPath(label);
+            this.description = this.formatDescription();
+            this.label = isHierarchical ? label : this.formatDisplayPath(label);
 
             // Set icon and color
             let icon = 'file';
@@ -202,7 +186,7 @@ export class RouteItem extends vscode.TreeItem {
         // Add group info if it's inside a group
         const groupMatch = this.routePath.match(/\(([^)]+)\)/);
         if (groupMatch && !this.routePath.startsWith('(')) {
-            parts.push(`[${groupMatch[1]} group]`);
+            parts.push(`[${groupMatch[1]}]`);
         }
 
         // Add matcher info if present
@@ -220,6 +204,7 @@ export class RouteItem extends vscode.TreeItem {
     }
 
     private formatSpecialLabel(label: string, type: RouteType): string {
+        console.log('formatSpecialLabel', label, type);
         if (type === 'spacer') {
             return '---------------'; // Simple spacer line
         }
