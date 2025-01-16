@@ -166,11 +166,11 @@
         "svelteRadar.sortingType": {
           "type": "string",
           "enum": [
-            "default",
-            "natural"
+            "natural",
+            "basic"
           ],
-          "default": "default",
-          "description": "Route sorting type (default: SvelteKit priority based, natural: natural number sorting)"
+          "default": "natural",
+          "description": "Route sorting type (natural: natural number sorting, basic: basic string comparison)"
         }
       }
     }

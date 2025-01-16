@@ -249,7 +249,7 @@ export class RoutesProvider implements vscode.TreeDataProvider<RouteItem> {
     }
 
     private compareRoutes(a: string, b: string): number {
-        const sortingType = vscode.workspace.getConfiguration('svelteRadar').get<'default' | 'natural'>('sortingType', 'default');
+        const sortingType = vscode.workspace.getConfiguration('svelteRadar').get<'natural' | 'basic'>('sortingType', 'natural');
 
         // Helper to get route type priority
         const getRoutePriority = (route: string): number => {

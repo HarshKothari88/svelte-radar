@@ -181,9 +181,9 @@ suite('Route Sorting Test Suite', () => {
         routesProvider = new RoutesProvider(workspaceDir);
     });
 
-    test('Default sorting should maintain standard string order', async () => {
+    test('Basic sorting should maintain standard string order', async () => {
         // Set sorting to default
-        await vscode.workspace.getConfiguration('svelteRadar').update('sortingType', 'default', true);
+        await vscode.workspace.getConfiguration('svelteRadar').update('sortingType', 'basic', true);
         
         const testRoutes = [
             'blog/1-first',

@@ -75,8 +75,8 @@ export function activate(context: vscode.ExtensionContext) {
 			command: 'svelteRadar.toggleSorting',
 			callback: async () => {
 				const config = vscode.workspace.getConfiguration('svelteRadar');
-				const currentType = config.get('sortingType', 'default');
-				const newType = currentType === 'default' ? 'natural' : 'default';
+				const currentType = config.get('sortingType', 'natural');
+				const newType = currentType === 'natural' ? 'basic' : 'natural';
 				await config.update('sortingType', newType, true);
 				routesProvider.refresh();
 			}
