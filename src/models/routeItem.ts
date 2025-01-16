@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
-import { ResetInfo, RouteType } from '../constant/type';
+import { FileType, ResetInfo, RouteType } from '../constant/type';
+import { basename } from 'path';
 
 export class RouteItem extends vscode.TreeItem {
     constructor(
@@ -10,7 +11,8 @@ export class RouteItem extends vscode.TreeItem {
         private port: number,
         public routeType: RouteType,
         public isHierarchical: boolean = false,
-        public resetInfo: ResetInfo | null = null
+        public resetInfo: ResetInfo | null = null,
+        public fileType: FileType = 'page',
     ) {
         super(
             label,
@@ -20,36 +22,22 @@ export class RouteItem extends vscode.TreeItem {
         );
 
         // Format the label and description
-        if (routeType === 'divider') {
-            this.label = this.formatDividerLabel(label);
+        if (routeType === 'divider' || routeType === 'spacer') {
+            this.label = this.formatSpecialLabel(label, routeType);
             this.description = '';
             this.contextValue = 'divider';
             this.tooltip = '';
             this.command = undefined;
             this.iconPath = undefined;
         } else {
-            // For hierarchical view, keep the bare parameter name
-            if (isHierarchical) {
-                // Simpler description for hierarchical view
-                const parts: string[] = [];
-                if (this.resetInfo) {
-                    parts.push(`[resets to ${this.resetInfo.displayName.replace(/[()]/g, '')}]`);
-                }
-                const matcherMatch = this.routePath.match(/\[(\w+)=(\w+)\]/);
-                if (matcherMatch) {
-                    parts.push(`[${matcherMatch[2]}]`);
-                }
-                this.description = parts.join(' ');
-            } else {
-                // Flat view formatting remains the same
-                this.description = this.formatDescription();
-            }
-            this.label = this.formatDisplayPath(label);
+            this.description = this.formatDescription();
+            this.label = isHierarchical ? label : this.formatDisplayPath(label);
 
             // Set icon and color
             let icon = 'file';
             let color = 'charts.green';
 
+            // First determine base icon and color from route type
             switch (routeType) {
                 case 'error':
                     icon = 'error';
@@ -78,6 +66,27 @@ export class RouteItem extends vscode.TreeItem {
                 default:
             }
 
+            const fileName = basename(filePath);
+            if (fileName) {
+                if (fileName.includes('+server.')) {
+                    icon = 'server-process';
+                    color = 'charts.orange';
+                } else if (fileName.includes('.server.')) {
+                    icon = 'server';
+                    color = 'charts.yellow';      // server-side files get yellow
+                } else if (fileName.includes('.ts') && !fileName.includes('.server.')) {
+                    icon = 'vm';
+                    color = 'charts.blue';        // client-side TS files get blue
+                } else if (fileName.includes('+layout.')) {
+                    icon = 'layout';
+                    color = 'charts.purple';
+                } else if (fileName.includes('+error.')) {
+                    icon = 'error';
+                    color = 'errorForeground';
+                }
+                // Regular page files will keep their route type colors
+            }
+
             // ignoring the private constructor error here
             // @ts-ignore
             this.iconPath = new vscode.ThemeIcon(icon, new vscode.ThemeColor(color));
@@ -90,22 +99,23 @@ export class RouteItem extends vscode.TreeItem {
                 title: 'Open File',
                 arguments: [this]
             };
-        }
 
-        // Enhanced tooltip
-        this.tooltip = this.getTooltipContent(routePath, routeType, resetInfo, filePath);
+            // Enhanced tooltip
+            this.tooltip = this.getTooltipContent(routePath, routeType, resetInfo, filePath, fileType);
+        }
     }
 
     private isGroupRoute(): boolean {
         return this.routePath.includes('(') && this.routePath.includes(')');
     }
 
-    private getTooltipContent(routePath: string, routeType: string, resetInfo: any, filePath: string): string {
+    private getTooltipContent(routePath: string, routeType: string, resetInfo: any, filePath: string, fileType: string): string {
         return [
             `Path: ${routePath}`,
             `Type: ${routeType}`,
             resetInfo ? `Resets to: ${resetInfo.displayName} layout` : '',
             filePath ? `File: ${filePath}` : '',
+            fileType ? `Type: ${fileType}` : '',
             this.isGroupRoute() ? 'Group Route' : ''
         ].filter(Boolean).join('\n');
     }
@@ -142,21 +152,41 @@ export class RouteItem extends vscode.TreeItem {
             layout: 'layout',
             group: 'group',
             divider: '',
-            matcher: 'matcher'
+            matcher: 'matcher',
+            spacer: ''
         };
 
-        // Add page type
-        if (this.routeType !== 'divider') {
-            // Check if path contains multiple parameter types
+        // Determine file type based on filename first
+        const fileName = this.filePath ? basename(this.filePath) : '';
+
+        // Add route type only for actual pages (not for layouts, servers, etc)
+        if (this.routeType !== 'divider' &&
+            (!fileName.includes('+layout.') &&
+                !fileName.includes('+server.'))) {
             const hasMultipleTypes = (this.routePath?.match(/\[[^\]]+\]/g) ?? []).length > 1;
             const displayType = hasMultipleTypes ? 'dynamic' : typeMap[this.routeType];
             parts.push(`[${displayType}]`);
         }
 
+        // Add file type indicators
+        if (fileName) {
+            if (fileName.includes('+server.')) {
+                parts.push('[api]');
+            } else if (fileName.includes('+page.server.') || fileName.includes('+layout.server.')) {
+                parts.push('[server]');
+            } else if (fileName.includes('+error.')) {
+                parts.push('[error]');
+            } else if (fileName.includes('+layout.ts') || fileName.includes('+page.ts')) {
+                parts.push('[client]');
+            } else if (fileName.includes('+layout.')) {
+                parts.push('[layout]');
+            }
+        }
+
         // Add group info if it's inside a group
         const groupMatch = this.routePath.match(/\(([^)]+)\)/);
         if (groupMatch && !this.routePath.startsWith('(')) {
-            parts.push(`[${groupMatch[1]} group]`);
+            parts.push(`[${groupMatch[1]}]`);
         }
 
         // Add matcher info if present
@@ -173,12 +203,17 @@ export class RouteItem extends vscode.TreeItem {
         return parts.join(' ');
     }
 
-    private formatDividerLabel(label: string): string {
-        // Check if it's a root level group
+    private formatSpecialLabel(label: string, type: RouteType): string {
+        console.log('formatSpecialLabel', label, type);
+        if (type === 'spacer') {
+            return '---------------'; // Simple spacer line
+        }
+
+        // For dividers (directory or group headers)
         if (label.startsWith('(') && label.endsWith(')')) {
             const groupName = label.slice(1, -1);
-            return `─────── ${groupName} (group) ───────`;
+            return `───── ${groupName} (group) ─────`;
         }
-        return `─────── ${label} ───────`;
+        return `───── ${label === '/' ? 'root' : label} ─────`;
     }
 }
