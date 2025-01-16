@@ -75,4 +75,12 @@ export class RouteUtils {
         if (name.startsWith('[') && name.endsWith(']')) { return `:${name.slice(1, -1)}`; }
         return name;
     }
+
+    static naturalSort(a: string, b: string): number {
+        const getName = (path: string) => path.split('/').pop() || '';
+        return getName(a).localeCompare(getName(b), undefined, {
+            numeric: true,
+            sensitivity: 'base'
+        });
+    }
 }
