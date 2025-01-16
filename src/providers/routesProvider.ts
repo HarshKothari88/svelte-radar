@@ -84,19 +84,19 @@ export class RoutesProvider implements vscode.TreeDataProvider<RouteItem> {
     private buildRoutesTree(dir: string, basePath: string): RouteItem[] {
         const entries = fs.readdirSync(dir).filter(file => !file.startsWith("."));
         const routes: RouteItem[] = [];
-    
+
         entries.sort((a, b) => this.compareRoutes(a, b));
-    
+
         for (const entry of entries) {
             const fullPath = path.join(dir, entry);
             const stat = fs.statSync(fullPath);
-    
+
             if (stat.isDirectory()) {
                 const routePath = path.join(basePath, entry);
                 const routeType = this.determineRouteType(entry);
                 const pageInfo = this.findPageInfo(fullPath);
                 const children = this.buildRoutesTree(fullPath, routePath);
-    
+
                 if (this.flatView) {
                     // In flat view, only add the route if it has a page file
                     if (pageInfo.filePath) {
@@ -130,7 +130,7 @@ export class RoutesProvider implements vscode.TreeDataProvider<RouteItem> {
                 }
             }
         }
-    
+
         return routes;
     }
 
@@ -249,19 +249,40 @@ export class RoutesProvider implements vscode.TreeDataProvider<RouteItem> {
     }
 
     private compareRoutes(a: string, b: string): number {
-        // Static segments win over dynamic segments
-        const aIsDynamic = a.includes('[');
-        const bIsDynamic = b.includes('[');
-        if (!aIsDynamic && bIsDynamic) { return -1; }
-        if (aIsDynamic && !bIsDynamic) { return 1; }
+        const sortingType = vscode.workspace.getConfiguration('svelteRadar').get<'default' | 'natural'>('sortingType', 'default');
 
-        // Rest/optional parameters have lowest priority
-        const aIsSpecial = a.startsWith('[...') || a.startsWith('[[');
-        const bIsSpecial = b.startsWith('[...') || b.startsWith('[[');
-        if (!aIsSpecial && bIsSpecial) { return -1; }
-        if (aIsSpecial && !bIsSpecial) { return 1; }
+        // Helper to get route type priority
+        const getRoutePriority = (route: string): number => {
+            const segment = route.split('/').pop() || '';
 
-        return 0;
+            // Check if it's a special parameter first (rest/optional)
+            const isSpecial = segment.startsWith('[...') || segment.startsWith('[[');
+            if (isSpecial) {
+                if (segment.startsWith('[...')) { return 0; }  // rest parameters (lowest)
+                if (segment.startsWith('[[')) { return 1; }    // optional parameters
+            }
+
+            // Then handle static vs dynamic
+            const isDynamic = segment.includes('[');
+            if (isDynamic) { return 2; }  // dynamic parameters
+            return 3;  // static routes (highest)
+        };
+
+        // Compare route types first
+        const aPriority = getRoutePriority(a);
+        const bPriority = getRoutePriority(b);
+
+        if (aPriority !== bPriority) {
+            return bPriority - aPriority;  // Higher priority comes first
+        }
+
+        // For routes of same type, use selected sorting method
+        if (sortingType === 'natural') {
+            return RouteUtils.naturalSort(a, b);
+        }
+
+        // Default string comparison
+        return a.localeCompare(b);
     }
 
     async search() {
