@@ -3,7 +3,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { RouteItem } from '../models/routeItem';
 import { RouteUtils } from '../utils/routeUtils';
-import { ResetInfo, RouteMatch, RouteType, SegmentMatch } from '../constant/type';
+import { ResetInfo, RouteFileInfo, RouteMatch, RouteType, SegmentMatch } from '../constant/type';
 
 /**
  * Provider class for managing SvelteKit routes in VS Code
@@ -84,53 +84,80 @@ export class RoutesProvider implements vscode.TreeDataProvider<RouteItem> {
     private buildRoutesTree(dir: string, basePath: string): RouteItem[] {
         const entries = fs.readdirSync(dir).filter(file => !file.startsWith("."));
         const routes: RouteItem[] = [];
-
+    
         entries.sort((a, b) => this.compareRoutes(a, b));
-
+    
+        // Only process root files if we're at the root level
+        if (!basePath) {
+            const fileInfos = this.findPageInfo(dir);
+            for (const fileInfo of fileInfos) {
+                const routeItem = new RouteItem(
+                    '/',
+                    '/',
+                    fileInfo.filePath,
+                    [],
+                    this.port,
+                    'static',
+                    false,
+                    fileInfo.resetInfo,
+                    fileInfo.fileType
+                );
+                
+                if (this.flatView) {
+                    routes.push(routeItem);
+                } else {
+                    if (routes.length === 0 || fileInfo.fileType === 'server') {
+                        routes.push(routeItem);
+                    }
+                }
+            }
+        }
+    
+        // Process directories
         for (const entry of entries) {
             const fullPath = path.join(dir, entry);
             const stat = fs.statSync(fullPath);
-
+    
             if (stat.isDirectory()) {
                 const routePath = path.join(basePath, entry);
                 const routeType = this.determineRouteType(entry);
-                const pageInfo = this.findPageInfo(fullPath);
                 const children = this.buildRoutesTree(fullPath, routePath);
-
+                const dirFileInfos = this.findPageInfo(fullPath);
+    
                 if (this.flatView) {
-                    // In flat view, only add the route if it has a page file
-                    if (pageInfo.filePath) {
+                    // Add directory files
+                    for (const fileInfo of dirFileInfos) {
                         routes.push(new RouteItem(
                             routePath,
                             routePath,
-                            pageInfo.filePath,
-                            [], // Empty children array in flat view
+                            fileInfo.filePath,
+                            [],
                             this.port,
                             routeType,
                             false,
-                            pageInfo.resetInfo
+                            fileInfo.resetInfo,
+                            fileInfo.fileType
                         ));
                     }
-                    // Add all children regardless
                     routes.push(...children);
                 } else {
-                    // In hierarchical view
-                    if (pageInfo.filePath || routeType === 'group' || children.length > 0) {
+                    if (dirFileInfos.length > 0 || routeType === 'group' || children.length > 0) {
                         routes.push(new RouteItem(
                             routePath,
                             routePath,
-                            pageInfo.filePath,
+                            dirFileInfos[0]?.filePath || '',
                             children,
                             this.port,
                             routeType,
                             true,
-                            pageInfo.resetInfo
+                            dirFileInfos[0]?.resetInfo || null,
+                            dirFileInfos[0]?.fileType || 'page'
                         ));
                     }
                 }
             }
         }
-
+    
         return routes;
     }
 
@@ -150,37 +177,90 @@ export class RoutesProvider implements vscode.TreeDataProvider<RouteItem> {
         return 'static';
     }
 
-    private findPageInfo(dir: string): { filePath: string; resetInfo: ResetInfo | null } {
+    private findPageInfo(dir: string): RouteFileInfo[] {
         const files = fs.readdirSync(dir);
-
-        // Check for reset pages first
+        const fileInfos: RouteFileInfo[] = [];
+    
+        // Check each file in the directory
         for (const file of files) {
+            // Skip non-route files
+            if (!file.startsWith('+')) {
+                continue;
+            }
+    
+            // Check for reset pages first
             if (file.includes('+page@')) {
                 const resetInfo = this.parseResetInfo(file);
-                if (resetInfo) {
-                    return {
-                        filePath: path.join(dir, file),
-                        resetInfo
-                    };
-                }
+                fileInfos.push({
+                    filePath: path.join(dir, file),
+                    fileType: 'page',
+                    resetInfo
+                });
+                continue;
+            }
+    
+            // Determine file type
+            if (file.startsWith('+page.svelte')) {
+                fileInfos.push({
+                    filePath: path.join(dir, file),
+                    fileType: 'page',
+                    resetInfo: null
+                });
+            }
+            else if (file.startsWith('+page.ts')) {
+                fileInfos.push({
+                    filePath: path.join(dir, file),
+                    fileType: 'pageClient',
+                    resetInfo: null
+                });
+            }
+            else if (file.startsWith('+page.server.ts')) {
+                fileInfos.push({
+                    filePath: path.join(dir, file),
+                    fileType: 'pageServer',
+                    resetInfo: null
+                });
+            }
+            else if (file.startsWith('+server.ts')) {
+                fileInfos.push({
+                    filePath: path.join(dir, file),
+                    fileType: 'server',
+                    resetInfo: null
+                });
+            }
+            else if (file.startsWith('+layout.svelte')) {
+                fileInfos.push({
+                    filePath: path.join(dir, file),
+                    fileType: 'layout',
+                    resetInfo: null
+                });
+            }
+            else if (file.startsWith('+layout.ts')) {
+                fileInfos.push({
+                    filePath: path.join(dir, file),
+                    fileType: 'layoutClient',
+                    resetInfo: null
+                });
+            }
+            else if (file.startsWith('+layout.server.ts')) {
+                fileInfos.push({
+                    filePath: path.join(dir, file),
+                    fileType: 'layoutServer',
+                    resetInfo: null
+                });
+            }
+            else if (file.startsWith('+error.svelte')) {
+                fileInfos.push({
+                    filePath: path.join(dir, file),
+                    fileType: 'error',
+                    resetInfo: null
+                });
             }
         }
-
-        // Check for regular page
-        const regularPage = files.find(f => f === '+page.svelte');
-        if (regularPage) {
-            return {
-                filePath: path.join(dir, regularPage),
-                resetInfo: null
-            };
-        }
-
-        return {
-            filePath: '',
-            resetInfo: null
-        };
+    
+        return fileInfos;
     }
-
+    
     private parseResetInfo(fileName: string): ResetInfo | null {
         const match = fileName.match(/\+page@(.*)\.svelte$/);
         if (!match) { return null; }
