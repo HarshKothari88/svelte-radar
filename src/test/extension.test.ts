@@ -171,3 +171,86 @@ suite('Route Matching Test Suite', () => {
         });
     });
 });
+
+suite('Route Sorting Test Suite', () => {
+    let routesProvider: RoutesProvider;
+    let workspaceDir: string;
+
+    suiteSetup(async () => {
+        workspaceDir = path.resolve(__dirname, '../../test-fixtures');
+        routesProvider = new RoutesProvider(workspaceDir);
+    });
+
+    test('Default sorting should maintain standard string order', async () => {
+        // Set sorting to default
+        await vscode.workspace.getConfiguration('svelteRadar').update('sortingType', 'default', true);
+        
+        const testRoutes = [
+            'blog/1-first',
+            'blog/10-tenth',
+            'blog/2-second',
+            'blog/20-twentieth'
+        ];
+
+        // Sort using the provider's compareRoutes method
+        const sorted = testRoutes.sort((a, b) => routesProvider['compareRoutes'](a, b));
+        
+        // In default sorting, string comparison means 10 comes before 2
+        assert.deepStrictEqual(sorted, [
+            'blog/1-first',
+            'blog/10-tenth',
+            'blog/2-second',
+            'blog/20-twentieth'
+        ]);
+    });
+
+    test('Natural sorting should order numbers correctly', async () => {
+        // Set sorting to natural
+        await vscode.workspace.getConfiguration('svelteRadar').update('sortingType', 'natural', true);
+        
+        const testRoutes = [
+            'blog/1-first',
+            'blog/10-tenth',
+            'blog/2-second',
+            'blog/20-twentieth'
+        ];
+
+        // Sort using the provider's compareRoutes method
+        const sorted = testRoutes.sort((a, b) => routesProvider['compareRoutes'](a, b));
+        
+        // In natural sorting, numbers should be ordered naturally
+        assert.deepStrictEqual(sorted, [
+            'blog/1-first',
+            'blog/2-second',
+            'blog/10-tenth',
+            'blog/20-twentieth'
+        ]);
+    });
+
+    test('Route type priorities should be maintained with natural sorting', async () => {
+        // Set sorting to natural
+        await vscode.workspace.getConfiguration('svelteRadar').update('sortingType', 'natural', true);
+        
+        const testRoutes = [
+            'blog/1-first',
+            'blog/[slug]',
+            'blog/2-second', 
+            'blog/[...rest]',
+            'blog/10-tenth',
+            'blog/[[optional]]'
+        ];
+    
+        // Sort using the provider's compareRoutes method
+        const sorted = testRoutes.sort((a, b) => routesProvider['compareRoutes'](a, b));
+        
+        // Static routes first, then dynamic, then optional, then rest
+        assert.deepStrictEqual(sorted, [
+            'blog/1-first',
+            'blog/2-second',
+            'blog/10-tenth',
+            'blog/[slug]',
+            'blog/[[optional]]',
+            'blog/[...rest]'
+        ]);
+    });
+});
