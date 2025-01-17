@@ -406,32 +406,55 @@ export class RoutesProvider implements vscode.TreeDataProvider<RouteItem> {
         }
     }
 
-    clearSearch() {
+    public updateSearch(pattern: string) {
+        this.searchPattern = pattern.toLowerCase();
+        this._onDidChangeTreeData.fire(undefined);
+    }
+
+    public clearSearch() {
         this.searchPattern = '';
-        this.refresh();
+        this._onDidChangeTreeData.fire(undefined);
     }
 
     private filterRoutes(routes: RouteItem[]): RouteItem[] {
         if (!this.searchPattern) {
             return routes;
         }
-
-        return routes.filter(route => {
-            // Don't filter dividers
+    
+        const filteredRoutes: RouteItem[] = [];
+        let currentGroup: RouteItem | null = null;
+        let currentGroupItems: RouteItem[] = [];
+    
+        for (const route of routes) {
             if (route.routeType === 'divider') {
-                return true;
+                // If we have a previous group with items, add it
+                if (currentGroup && currentGroupItems.length > 0) {
+                    filteredRoutes.push(currentGroup);
+                    filteredRoutes.push(...currentGroupItems);
+                }
+                // Start a new group
+                currentGroup = route;
+                currentGroupItems = [];
+            } else {
+                const matchesSearch = route.label.toLowerCase().includes(this.searchPattern) ||
+                    route.routePath.toLowerCase().includes(this.searchPattern);
+    
+                if (matchesSearch) {
+                    if (route.children.length > 0) {
+                        route.children = this.filterRoutes(route.children);
+                    }
+                    currentGroupItems.push(route);
+                }
             }
-
-            const matchesSearch = route.label.toLowerCase().includes(this.searchPattern) ||
-                route.routePath.toLowerCase().includes(this.searchPattern);
-
-            if (route.children.length > 0) {
-                route.children = this.filterRoutes(route.children);
-                return route.children.length > 0 || matchesSearch;
-            }
-
-            return matchesSearch;
-        });
+        }
+    
+        // Add the last group if it has items
+        if (currentGroup && currentGroupItems.length > 0) {
+            filteredRoutes.push(currentGroup);
+            filteredRoutes.push(...currentGroupItems);
+        }
+    
+        return filteredRoutes;
     }
 
     /**
