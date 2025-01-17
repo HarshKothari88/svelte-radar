@@ -74,12 +74,14 @@
       },
       {
         "command": "svelteRadar.search",
+        "when": "view == routesView && !svelteRadar:hasSearchTerm",
         "title": "Search Routes",
         "category": "Svelte Radar",
         "icon": "$(search)"
       },
       {
         "command": "svelteRadar.clearSearch",
+        "when": "view == routesView && svelteRadar:hasSearchTerm",
         "title": "Clear Search",
         "category": "Svelte Radar",
         "icon": "$(clear-all)"
@@ -113,17 +115,22 @@
     "menus": {
       "view/title": [
         {
+          "command": "svelteRadar.search",
+          "when": "view == routesView && !svelteRadar:hasSearchTerm",
+          "group": "navigation@1"
+        },
+        {
+          "command": "svelteRadar.clearSearch",
+          "when": "view == routesView && svelteRadar:hasSearchTerm",
+          "group": "navigation@1"
+        },
+        {
           "command": "svelteRadar.refreshRoutes",
           "when": "view == routesView",
           "group": "navigation"
         },
         {
           "command": "svelteRadar.toggleViewType",
-          "when": "view == routesView",
-          "group": "navigation"
-        },
-        {
-          "command": "svelteRadar.search",
           "when": "view == routesView",
           "group": "navigation"
         },

@@ -23,6 +23,9 @@ export class RoutesProvider implements vscode.TreeDataProvider<RouteItem> {
         this.port = workspaceFolders
             ? RouteUtils.detectPort(workspaceFolders[0].uri.fsPath)
             : 5173;
+
+        vscode.commands.executeCommand('setContext', 'svelteRadar:hasSearchTerm', false);
+
     }
 
     refresh(): void {
@@ -394,6 +397,10 @@ export class RoutesProvider implements vscode.TreeDataProvider<RouteItem> {
         return a.localeCompare(b);
     }
 
+    private async updateSearchContext(hasSearch: boolean) {
+        await vscode.commands.executeCommand('setContext', 'svelteRadar:hasSearchTerm', hasSearch);
+    }
+
     async search() {
         const searchInput = await vscode.window.showInputBox({
             prompt: "Search routes",
@@ -402,29 +409,26 @@ export class RoutesProvider implements vscode.TreeDataProvider<RouteItem> {
 
         if (searchInput !== undefined) {
             this.searchPattern = searchInput.toLowerCase();
+            await this.updateSearchContext(!!this.searchPattern);
             this.refresh();
         }
     }
 
-    public updateSearch(pattern: string) {
-        this.searchPattern = pattern.toLowerCase();
-        this._onDidChangeTreeData.fire(undefined);
-    }
-
-    public clearSearch() {
+    async clearSearch() {
         this.searchPattern = '';
-        this._onDidChangeTreeData.fire(undefined);
+        await this.updateSearchContext(false);
+        this.refresh();
     }
 
     private filterRoutes(routes: RouteItem[]): RouteItem[] {
         if (!this.searchPattern) {
             return routes;
         }
-    
+
         const filteredRoutes: RouteItem[] = [];
         let currentGroup: RouteItem | null = null;
         let currentGroupItems: RouteItem[] = [];
-    
+
         for (const route of routes) {
             if (route.routeType === 'divider') {
                 // If we have a previous group with items, add it
@@ -438,7 +442,7 @@ export class RoutesProvider implements vscode.TreeDataProvider<RouteItem> {
             } else {
                 const matchesSearch = route.label.toLowerCase().includes(this.searchPattern) ||
                     route.routePath.toLowerCase().includes(this.searchPattern);
-    
+
                 if (matchesSearch) {
                     if (route.children.length > 0) {
                         route.children = this.filterRoutes(route.children);
@@ -447,13 +451,13 @@ export class RoutesProvider implements vscode.TreeDataProvider<RouteItem> {
                 }
             }
         }
-    
+
         // Add the last group if it has items
         if (currentGroup && currentGroupItems.length > 0) {
             filteredRoutes.push(currentGroup);
             filteredRoutes.push(...currentGroupItems);
         }
-    
+
         return filteredRoutes;
     }
 
