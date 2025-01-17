@@ -23,6 +23,9 @@ export class RoutesProvider implements vscode.TreeDataProvider<RouteItem> {
         this.port = workspaceFolders
             ? RouteUtils.detectPort(workspaceFolders[0].uri.fsPath)
             : 5173;
+
+        vscode.commands.executeCommand('setContext', 'svelteRadar:hasSearchTerm', false);
+
     }
 
     refresh(): void {
@@ -394,6 +397,10 @@ export class RoutesProvider implements vscode.TreeDataProvider<RouteItem> {
         return a.localeCompare(b);
     }
 
+    private async updateSearchContext(hasSearch: boolean) {
+        await vscode.commands.executeCommand('setContext', 'svelteRadar:hasSearchTerm', hasSearch);
+    }
+
     async search() {
         const searchInput = await vscode.window.showInputBox({
             prompt: "Search routes",
@@ -402,12 +409,14 @@ export class RoutesProvider implements vscode.TreeDataProvider<RouteItem> {
 
         if (searchInput !== undefined) {
             this.searchPattern = searchInput.toLowerCase();
+            await this.updateSearchContext(!!this.searchPattern);
             this.refresh();
         }
     }
 
-    clearSearch() {
+    async clearSearch() {
         this.searchPattern = '';
+        await this.updateSearchContext(false);
         this.refresh();
     }
 
@@ -416,22 +425,40 @@ export class RoutesProvider implements vscode.TreeDataProvider<RouteItem> {
             return routes;
         }
 
-        return routes.filter(route => {
-            // Don't filter dividers
+        const filteredRoutes: RouteItem[] = [];
+        let currentGroup: RouteItem | null = null;
+        let currentGroupItems: RouteItem[] = [];
+
+        for (const route of routes) {
             if (route.routeType === 'divider') {
-                return true;
+                // If we have a previous group with items, add it
+                if (currentGroup && currentGroupItems.length > 0) {
+                    filteredRoutes.push(currentGroup);
+                    filteredRoutes.push(...currentGroupItems);
+                }
+                // Start a new group
+                currentGroup = route;
+                currentGroupItems = [];
+            } else {
+                const matchesSearch = route.label.toLowerCase().includes(this.searchPattern) ||
+                    route.routePath.toLowerCase().includes(this.searchPattern);
+
+                if (matchesSearch) {
+                    if (route.children.length > 0) {
+                        route.children = this.filterRoutes(route.children);
+                    }
+                    currentGroupItems.push(route);
+                }
             }
+        }
 
-            const matchesSearch = route.label.toLowerCase().includes(this.searchPattern) ||
-                route.routePath.toLowerCase().includes(this.searchPattern);
+        // Add the last group if it has items
+        if (currentGroup && currentGroupItems.length > 0) {
+            filteredRoutes.push(currentGroup);
+            filteredRoutes.push(...currentGroupItems);
+        }
 
-            if (route.children.length > 0) {
-                route.children = this.filterRoutes(route.children);
-                return route.children.length > 0 || matchesSearch;
-            }
-
-            return matchesSearch;
-        });
+        return filteredRoutes;
     }
 
     /**
