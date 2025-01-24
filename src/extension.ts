@@ -1,6 +1,8 @@
 import * as vscode from 'vscode';
 import { RoutesProvider } from './providers/routesProvider';
 import { RouteItem } from './models/routeItem';
+import path from 'path';
+import fs from 'fs';
 
 export function activate(context: vscode.ExtensionContext) {
 	// Initialize the routes provider
@@ -11,6 +13,32 @@ export function activate(context: vscode.ExtensionContext) {
 		treeDataProvider: routesProvider,
 		showCollapseAll: true
 	});
+
+	const workspaceFolders = vscode.workspace.workspaceFolders;
+    if (workspaceFolders) {
+        const workspaceRoot = workspaceFolders[0].uri.fsPath;
+        const routesDir = routesProvider.getRoutesDir();
+        
+        if (!fs.existsSync(routesDir)) {
+            vscode.window.showWarningMessage(
+                'SvelteKit routes directory not found. Create .vscode/svelte-radar.json to configure root of your sveltekit project.',
+                'Create Config'
+            ).then(selection => {
+                if (selection === 'Create Config') {
+                    const configDir = path.join(workspaceRoot, '.vscode');
+                    const configPath = path.join(configDir, 'svelte-radar.json');
+                    
+                    fs.mkdirSync(configDir, { recursive: true });
+                    fs.writeFileSync(configPath, JSON.stringify({
+                        projectRoot: "frontend/"
+                    }, null, 2));
+                    
+                    vscode.workspace.openTextDocument(configPath)
+                        .then(doc => vscode.window.showTextDocument(doc));
+                }
+            });
+        }
+    }
 
 	// Register commands
 	const commands = [
