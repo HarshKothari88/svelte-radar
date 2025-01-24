@@ -2,6 +2,17 @@
 
 All notable changes to the "Svelte Radar" extension will be documented in this file.
 
+## [1.0.3] - 2024-01-24
+
+### Added
+- Support for workspace-specific configuration via `.vscode/svelte-radar.json`
+- Ability to configure project root path for monorepo support using `projectRoot` in config
+- Active file highlighting in the routes tree to indicate current location
+
+### Changed
+- Improved search UX with better filtering and grouping
+- Moved port configuration from settings to `svelte-radar.json` for workspace-specific settings
+
 ## [1.0.2] - 2024-01-17
 
 ### Added
