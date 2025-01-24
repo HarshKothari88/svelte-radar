@@ -156,11 +156,6 @@
     "configuration": {
       "title": "Svelte Radar",
       "properties": {
-        "svelteRadar.devServerPort": {
-          "type": "number",
-          "default": 5173,
-          "description": "Development server port number"
-        },
         "svelteRadar.viewType": {
           "type": "string",
           "enum": [

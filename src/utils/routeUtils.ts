@@ -3,27 +3,6 @@ import * as fs from 'fs';
 import * as vscode from 'vscode';
 
 export class RouteUtils {
-    static detectPort(rootPath: string): number {
-        const configFiles = ['svelte.config.js', 'vite.config.js', 'vite.config.ts'];
-
-        for (const configFile of configFiles) {
-            const configPath = path.join(rootPath, configFile);
-            if (fs.existsSync(configPath)) {
-                try {
-                    const content = fs.readFileSync(configPath, 'utf-8');
-                    const portMatch = content.match(/port:\s*(\d+)/);
-                    if (portMatch) {
-                        return parseInt(portMatch[1], 10);
-                    }
-                } catch (error) {
-                    console.error(`Error reading config file: ${error}`);
-                }
-            }
-        }
-
-        return vscode.workspace.getConfiguration('svelteRadar').get('devServerPort', 5173);
-    }
-
     /**
      * Decodes SvelteKit route path encodings
      */
