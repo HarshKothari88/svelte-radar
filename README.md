@@ -2,6 +2,10 @@
 
 # Svelte Radar
 
+[![VSCode Marketplace](https://img.shields.io/visual-studio-marketplace/v/HarshKothari.svelte-radar.svg)](https://marketplace.visualstudio.com/items?itemName=HarshKothari.svelte-radar)
+
+[Install from VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=HarshKothari.svelte-radar)
+
 Svelte Radar is a Visual Studio Code extension designed to streamline your SvelteKit development experience. It provides a visual overview of your project's routing structure, helping you navigate complex route hierarchies with ease.
 
 ## Features
