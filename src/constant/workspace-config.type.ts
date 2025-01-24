@@ -1,3 +1,4 @@
-export interface WorkspaceConfig {
-    routesPath?: string;
+export 
+interface WorkspaceConfig {
+    projectRoot?: string;
 }

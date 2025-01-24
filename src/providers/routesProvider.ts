@@ -4,6 +4,7 @@ import * as fs from 'fs';
 import { RouteItem } from '../models/routeItem';
 import { RouteUtils } from '../utils/routeUtils';
 import { ResetInfo, RouteFileInfo, RouteMatch, RouteType, SegmentMatch } from '../constant/type';
+import { WorkspaceConfig } from '../constant/workspace-config.type';
 
 /**
  * Provider class for managing SvelteKit routes in VS Code
@@ -47,24 +48,38 @@ export class RoutesProvider implements vscode.TreeDataProvider<RouteItem> {
     }
 
     // Helper method to get routes directory
-    private getRoutesDir(): string {
+    getRoutesDir(): string {
         if (this.testRoot) {
             return path.join(this.testRoot, 'src', 'routes');
         }
-
+    
         const workspaceFolders = vscode.workspace.workspaceFolders;
         if (!workspaceFolders) {
             throw new Error('No workspace folder found');
         }
-
-        return path.join(workspaceFolders[0].uri.fsPath, 'src', 'routes');
+    
+        const workspaceRoot = workspaceFolders[0].uri.fsPath;
+        const configPath = path.join(workspaceRoot, '.vscode', 'svelte-radar.json');
+    
+        let routesPath = 'src/routes'; // Default path
+        
+        if (fs.existsSync(configPath)) {
+            try {
+                const config: WorkspaceConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+                routesPath = config.projectRoot ? path.join(config.projectRoot, 'src', 'routes') : routesPath;
+            } catch (error) {
+                console.error('Error reading workspace config:', error);
+            }
+        }
+    
+        return path.join(workspaceRoot, routesPath);
     }
 
     async getChildren(element?: RouteItem): Promise<RouteItem[]> {
         const workspaceFolders = vscode.workspace.workspaceFolders;
         if (!workspaceFolders) { return []; }
 
-        const routesDir = path.join(workspaceFolders[0].uri.fsPath, "src", "routes");
+        const routesDir = this.getRoutesDir();
         if (!fs.existsSync(routesDir)) {
             vscode.window.showErrorMessage("SvelteKit routes directory not found.");
             return [];
