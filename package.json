@@ -143,12 +143,12 @@
       "view/item/context": [
         {
           "command": "svelteRadar.openInBrowser",
-          "when": "view == routesView",
+          "when": "view == routesView && !(viewItem == divider || viewItem == spacer)", 
           "group": "inline"
         },
         {
-          "command": "svelteRadar.openFile",
-          "when": "view == routesView",
+          "command": "svelteRadar.openFile", 
+          "when": "view == routesView && !(viewItem == divider || viewItem == spacer)",
           "group": "inline"
         }
       ]
