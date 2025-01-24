@@ -16,6 +16,7 @@ export class RoutesProvider implements vscode.TreeDataProvider<RouteItem> {
     private flatView: boolean;
     private searchPattern: string = '';
     private testRoot?: string;
+    private timeout: NodeJS.Timeout | undefined;
 
     constructor(testRoot?: string) {
         this.testRoot = testRoot;
@@ -26,6 +27,16 @@ export class RoutesProvider implements vscode.TreeDataProvider<RouteItem> {
             : 5173;
 
         vscode.commands.executeCommand('setContext', 'svelteRadar:hasSearchTerm', false);
+
+
+        vscode.window.onDidChangeActiveTextEditor(() => {
+            if (this.timeout) {
+            clearTimeout(this.timeout);
+            }
+            this.timeout = setTimeout(() => {
+            this.refresh();
+            }, 500); // Delay for 500 milliseconds
+        });
 
     }
 
@@ -455,7 +466,8 @@ export class RoutesProvider implements vscode.TreeDataProvider<RouteItem> {
                 currentGroup = route;
                 currentGroupItems = [];
             } else {
-                const matchesSearch = route.label.toLowerCase().includes(this.searchPattern) ||
+                const label = typeof route.label === 'string' ? route.label.toLowerCase() : '';
+                const matchesSearch = label.includes(this.searchPattern) ||
                     route.routePath.toLowerCase().includes(this.searchPattern);
 
                 if (matchesSearch) {
