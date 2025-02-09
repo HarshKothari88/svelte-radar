@@ -132,18 +132,36 @@ export class RoutesProvider implements vscode.TreeDataProvider<RouteItem> {
       return [];
     }
 
+    // If there's a search pattern, apply it only at the root level
+    if (this.searchPattern) {
+      if (!element) {
+        // Only filter at root level
+        if (this.flatView) {
+          const routes = this.buildRoutesTree(routesDir, "");
+          const flatRoutes = this.flattenRoutes(routes);
+          return this.filterRoutes(flatRoutes);
+        } else {
+          const routes = this.buildRoutesTree(routesDir, "");
+          const filtered = this.filterRoutes(routes);
+          return filtered;
+        }
+      } else {
+        // For child nodes during search, just return children without filtering
+        return element.children || [];
+      }
+    }
+
+    // Normal behavior without search
     if (this.flatView && !element) {
       const routes = this.buildRoutesTree(routesDir, "");
-      const flatRoutes = this.flattenRoutes(routes);
-      return this.filterRoutes(flatRoutes);
+      return this.flattenRoutes(routes);
     }
 
     if (!element) {
-      const routes = this.buildRoutesTree(routesDir, "");
-      return this.filterRoutes(routes);
+      return this.buildRoutesTree(routesDir, "");
     }
 
-    return this.filterRoutes(element.children || []);
+    return element.children || [];
   }
 
   private buildRoutesTree(dir: string, basePath: string): RouteItem[] {
@@ -494,43 +512,114 @@ export class RoutesProvider implements vscode.TreeDataProvider<RouteItem> {
       return routes;
     }
 
-    const filteredRoutes: RouteItem[] = [];
-    let currentGroup: RouteItem | null = null;
-    let currentGroupItems: RouteItem[] = [];
+    const searchSegments = this.searchPattern
+      .toLowerCase()
+      .split("/")
+      .filter(Boolean);
 
-    for (const route of routes) {
-      if (route.routeType === "divider") {
-        // If we have a previous group with items, add it
-        if (currentGroup && currentGroupItems.length > 0) {
-          filteredRoutes.push(currentGroup);
-          filteredRoutes.push(...currentGroupItems);
-        }
-        // Start a new group
-        currentGroup = route;
-        currentGroupItems = [];
-      } else {
+    const matchesSearch = (
+      route: RouteItem,
+      isHierarchical: boolean
+    ): boolean => {
+      if (!isHierarchical) {
+        // Flat view - simple includes matching
         const label =
           typeof route.label === "string" ? route.label.toLowerCase() : "";
-        const matchesSearch =
+        return (
           label.includes(this.searchPattern) ||
-          route.routePath.toLowerCase().includes(this.searchPattern);
+          route.routePath.toLowerCase().includes(this.searchPattern)
+        );
+      } else {
+        // Hierarchical view - path-based matching
+        const routeSegments = route.routePath
+          .toLowerCase()
+          .split("\\")
+          .filter(Boolean);
 
-        if (matchesSearch) {
-          if (route.children.length > 0) {
-            route.children = this.filterRoutes(route.children);
+        // Match any segment against search segments
+        return searchSegments.every((searchSeg) =>
+          routeSegments.some((routeSeg) => {
+            // Handle special route types
+            const normalizedRouteSeg = routeSeg
+              .replace(/^\[\.\.\.(\w+)\]$/, "*$1") // [...param] -> *param
+              .replace(/^\[\[(\w+)\]\]$/, ":$1?") // [[param]] -> :param?
+              .replace(/^\[(\w+)=\w+\]$/, ":$1") // [param=matcher] -> :param
+              .replace(/^\[(\w+)\]$/, ":$1") // [param] -> :param
+              .replace(/^\((.*?)\)$/, "$1"); // (group) -> group
+
+            return normalizedRouteSeg.includes(searchSeg);
+          })
+        );
+      }
+    };
+
+    const filterHierarchical = (route: RouteItem): RouteItem | null => {
+      // Always keep root level files and dividers for structure
+      if (route.routeType === "divider" || route.routeType === "spacer") {
+        return route;
+      }
+
+      // Check if current route matches
+      const currentMatches = matchesSearch(route, true);
+
+      // Filter children recursively
+      const filteredChildren = route.children
+        .map((child) => filterHierarchical(child))
+        .filter((child): child is RouteItem => child !== null);
+
+      // Keep the route if it matches or has matching children
+      if (currentMatches || filteredChildren.length > 0) {
+        return new RouteItem(
+          route.label,
+          route.routePath,
+          route.filePath,
+          filteredChildren,
+          this.port,
+          route.routeType,
+          true,
+          route.resetInfo,
+          route.fileType
+        );
+      }
+
+      return null;
+    };
+
+    const filterFlat = (): RouteItem[] => {
+      const filteredRoutes: RouteItem[] = [];
+      let currentGroup: RouteItem | null = null;
+      let currentGroupItems: RouteItem[] = [];
+
+      for (const route of routes) {
+        if (route.routeType === "divider") {
+          if (currentGroup && currentGroupItems.length > 0) {
+            filteredRoutes.push(currentGroup);
+            filteredRoutes.push(...currentGroupItems);
           }
+          currentGroup = route;
+          currentGroupItems = [];
+        } else if (matchesSearch(route, false)) {
           currentGroupItems.push(route);
         }
       }
-    }
 
-    // Add the last group if it has items
-    if (currentGroup && currentGroupItems.length > 0) {
-      filteredRoutes.push(currentGroup);
-      filteredRoutes.push(...currentGroupItems);
-    }
+      // Add the last group if it has items
+      if (currentGroup && currentGroupItems.length > 0) {
+        filteredRoutes.push(currentGroup);
+        filteredRoutes.push(...currentGroupItems);
+      }
 
-    return filteredRoutes;
+      return filteredRoutes;
+    };
+
+    // Use different filtering strategy based on view type
+    if (this.flatView) {
+      return filterFlat();
+    } else {
+      return routes
+        .map((route) => filterHierarchical(route))
+        .filter((route): route is RouteItem => route !== null);
+    }
   }
 
   /**
