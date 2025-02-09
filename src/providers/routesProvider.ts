@@ -51,6 +51,9 @@ export class RoutesProvider implements vscode.TreeDataProvider<RouteItem> {
     );
 
     vscode.window.onDidChangeActiveTextEditor(() => {
+      if(this.searchPattern) {
+        return; // Don't refresh if we're in search mode
+      }
       if (this.timeout) {
         clearTimeout(this.timeout);
       }
@@ -132,18 +135,36 @@ export class RoutesProvider implements vscode.TreeDataProvider<RouteItem> {
       return [];
     }
 
+    // If there's a search pattern, apply it only at the root level
+    if (this.searchPattern) {
+      if (!element) {
+        // Only filter at root level
+        if (this.flatView) {
+          const routes = this.buildRoutesTree(routesDir, "");
+          const flatRoutes = this.flattenRoutes(routes);
+          return this.filterRoutes(flatRoutes);
+        } else {
+          const routes = this.buildRoutesTree(routesDir, "");
+          const filtered = this.filterRoutes(routes);
+          return filtered;
+        }
+      } else {
+        // For child nodes during search, just return children without filtering
+        return element.children || [];
+      }
+    }
+
+    // Normal behavior without search
     if (this.flatView && !element) {
       const routes = this.buildRoutesTree(routesDir, "");
-      const flatRoutes = this.flattenRoutes(routes);
-      return this.filterRoutes(flatRoutes);
+      return this.flattenRoutes(routes);
     }
 
     if (!element) {
-      const routes = this.buildRoutesTree(routesDir, "");
-      return this.filterRoutes(routes);
+      return this.buildRoutesTree(routesDir, "");
     }
 
-    return this.filterRoutes(element.children || []);
+    return element.children || [];
   }
 
   private buildRoutesTree(dir: string, basePath: string): RouteItem[] {
@@ -489,48 +510,166 @@ export class RoutesProvider implements vscode.TreeDataProvider<RouteItem> {
     this.refresh();
   }
 
+  private matchesSearch = (
+    route: RouteItem,
+    isHierarchical: boolean
+  ): boolean => {
+    // Normalize paths first
+    const normalizedSearch = this.searchPattern
+      .toLowerCase()
+      .replace(/\/+/g, "/")
+      .replace(/\/$/, "");
+
+    const normalizedRoutePath = route.routePath
+      .toLowerCase()
+      .replace(/\\/g, "/")
+      .replace(/\/+/g, "/")
+      .replace(/\/$/, "");
+
+    // Split into segments
+    const searchSegments = normalizedSearch.split("/").filter(Boolean);
+    const routeSegments = normalizedRoutePath.split("/").filter(Boolean);
+
+    // For single segment searches, be more permissive
+    if (searchSegments.length === 1) {
+      return routeSegments.some((segment) =>
+        this.normalizeSegment(segment).includes(searchSegments[0])
+      );
+    }
+
+    // For multi-segment searches, require continuous matching
+    if (searchSegments.length > routeSegments.length) {
+      return false;
+    }
+
+    // Try to match segments continuously
+    for (let i = 0; i <= routeSegments.length - searchSegments.length; i++) {
+      const matched = searchSegments.every((searchSeg, j) => {
+        const routeSeg = routeSegments[i + j];
+        return this.segmentsMatch(searchSeg, routeSeg);
+      });
+      if (matched) {
+        return true;
+      }
+    }
+
+    return false;
+  };
+
+  private normalizeSegment(segment: string): string {
+    return segment
+      .replace(/^\[\.\.\.(\w+)\]$/, "*$1") // [...param] -> *param
+      .replace(/^\[\[(\w+)\]\]$/, ":$1?") // [[param]] -> :param?
+      .replace(/^\[(\w+)=\w+\]$/, ":$1") // [param=matcher] -> :param
+      .replace(/^\[(\w+)\]$/, ":$1"); // [param] -> :param
+  }
+
+  private segmentsMatch(searchSeg: string, routeSeg: string): boolean {
+    if (!searchSeg || !routeSeg) {
+      return false;
+    }
+
+    // Normalize the route segment
+    const normalizedRouteSeg = this.normalizeSegment(routeSeg);
+
+    // If search segment starts with ':', treat it as looking for a parameter
+    if (searchSeg.startsWith(":")) {
+      const searchParamName = searchSeg.slice(1);
+      // Match if route segment is any type of parameter
+      return routeSeg.startsWith("[");
+    }
+
+    // For exact matches
+    if (searchSeg === normalizedRouteSeg) {
+      return true;
+    }
+
+    // For rest parameters
+    if (routeSeg.startsWith("[...")) {
+      return true;
+    }
+
+    // For normal parameters, require exact matches
+    if (routeSeg.startsWith("[")) {
+      return normalizedRouteSeg === searchSeg;
+    }
+
+    // For static segments, require exact matches
+    return searchSeg === routeSeg;
+  }
+
   private filterRoutes(routes: RouteItem[]): RouteItem[] {
     if (!this.searchPattern) {
       return routes;
     }
 
-    const filteredRoutes: RouteItem[] = [];
-    let currentGroup: RouteItem | null = null;
-    let currentGroupItems: RouteItem[] = [];
+    const filterHierarchical = (route: RouteItem): RouteItem | null => {
+      // Always keep root level files and dividers for structure
+      if (route.routeType === "divider" || route.routeType === "spacer") {
+        return route;
+      }
 
-    for (const route of routes) {
-      if (route.routeType === "divider") {
-        // If we have a previous group with items, add it
-        if (currentGroup && currentGroupItems.length > 0) {
-          filteredRoutes.push(currentGroup);
-          filteredRoutes.push(...currentGroupItems);
-        }
-        // Start a new group
-        currentGroup = route;
-        currentGroupItems = [];
-      } else {
-        const label =
-          typeof route.label === "string" ? route.label.toLowerCase() : "";
-        const matchesSearch =
-          label.includes(this.searchPattern) ||
-          route.routePath.toLowerCase().includes(this.searchPattern);
+      // Check if current route matches
+      const currentMatches = this.matchesSearch(route, true);
 
-        if (matchesSearch) {
-          if (route.children.length > 0) {
-            route.children = this.filterRoutes(route.children);
+      // Filter children recursively
+      const filteredChildren = route.children
+        .map((child) => filterHierarchical(child))
+        .filter((child): child is RouteItem => child !== null);
+
+      // Keep the route if it matches or has matching children
+      if (currentMatches || filteredChildren.length > 0) {
+        return new RouteItem(
+          route.label,
+          route.routePath,
+          route.filePath,
+          filteredChildren,
+          this.port,
+          route.routeType,
+          true,
+          route.resetInfo,
+          route.fileType
+        );
+      }
+
+      return null;
+    };
+
+    const filterFlat = (): RouteItem[] => {
+      const filteredRoutes: RouteItem[] = [];
+      let currentGroup: RouteItem | null = null;
+      let currentGroupItems: RouteItem[] = [];
+
+      for (const route of routes) {
+        if (route.routeType === "divider") {
+          if (currentGroup && currentGroupItems.length > 0) {
+            filteredRoutes.push(currentGroup);
+            filteredRoutes.push(...currentGroupItems);
           }
+          currentGroup = route;
+          currentGroupItems = [];
+        } else if (this.matchesSearch(route, false)) {
           currentGroupItems.push(route);
         }
       }
-    }
 
-    // Add the last group if it has items
-    if (currentGroup && currentGroupItems.length > 0) {
-      filteredRoutes.push(currentGroup);
-      filteredRoutes.push(...currentGroupItems);
-    }
+      // Add the last group if it has items
+      if (currentGroup && currentGroupItems.length > 0) {
+        filteredRoutes.push(currentGroup);
+        filteredRoutes.push(...currentGroupItems);
+      }
 
-    return filteredRoutes;
+      return filteredRoutes;
+    };
+
+    // Use different filtering strategy based on view type
+    if (this.flatView) {
+      return filterFlat();
+    } else {
+      return routes
+        .map((route) => filterHierarchical(route))
+        .filter((route): route is RouteItem => route !== null);
+    }
   }
 
   /**
