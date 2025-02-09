@@ -2,7 +2,21 @@
 
 All notable changes to the "Svelte Radar" extension will be documented in this file.
 
-## [1.0.3] - 2024-01-24
+## [1.0.4] - 2025-02-09
+
+### Improved
+- Significantly enhanced route search functionality:
+  - More precise segment matching for multi-parameter routes
+  - Fixed issues with trailing slashes in search
+  - Improved matching for consecutive dynamic parameters
+
+### Fixed
+- Search algorithm issues with consecutive dynamic parameters
+- Over-permissive route matching in search results
+- Inconsistent behavior with trailing slashes in search
+- Bug causing empty display in hierarchical view
+
+## [1.0.3] - 2025-01-24
 
 ### Added
 - Support for workspace-specific configuration via `.vscode/svelte-radar.json`
@@ -13,7 +27,7 @@ All notable changes to the "Svelte Radar" extension will be documented in this f
 - Improved search UX with better filtering and grouping
 - Moved port configuration from settings to `svelte-radar.json` for workspace-specific settings
 
-## [1.0.2] - 2024-01-17
+## [1.0.2] - 2025-01-17
 
 ### Added
 - Complete support for all SvelteKit route file types:
@@ -37,12 +51,12 @@ All notable changes to the "Svelte Radar" extension will be documented in this f
 - Route sorting issues with numbered prefixes/suffixes
 - Various route matching edge cases
 
-## [1.0.1] - 2024-01-08
+## [1.0.1] - 2025-01-08
 
 ### Fixed
 - Lower minimum supported VS Code version to 1.60.0 for wider compatibility with VS Code and Cursor editor
 
-## [1.0.0] - 2024-01-05
+## [1.0.0] - 2025-01-05
 
 ### Added
 - Initial release  
