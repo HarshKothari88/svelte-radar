@@ -507,51 +507,98 @@ export class RoutesProvider implements vscode.TreeDataProvider<RouteItem> {
     this.refresh();
   }
 
+  private matchesSearch = (
+    route: RouteItem,
+    isHierarchical: boolean
+  ): boolean => {
+    // Normalize paths first
+    const normalizedSearch = this.searchPattern
+      .toLowerCase()
+      .replace(/\/+/g, "/")
+      .replace(/\/$/, "");
+
+    const normalizedRoutePath = route.routePath
+      .toLowerCase()
+      .replace(/\\/g, "/")
+      .replace(/\/+/g, "/")
+      .replace(/\/$/, "");
+
+    // Split into segments
+    const searchSegments = normalizedSearch.split("/").filter(Boolean);
+    const routeSegments = normalizedRoutePath.split("/").filter(Boolean);
+
+    // For single segment searches, be more permissive
+    if (searchSegments.length === 1) {
+      return routeSegments.some((segment) =>
+        this.normalizeSegment(segment).includes(searchSegments[0])
+      );
+    }
+
+    // For multi-segment searches, require continuous matching
+    if (searchSegments.length > routeSegments.length) {
+      return false;
+    }
+
+    // Try to match segments continuously
+    for (let i = 0; i <= routeSegments.length - searchSegments.length; i++) {
+      const matched = searchSegments.every((searchSeg, j) => {
+        const routeSeg = routeSegments[i + j];
+        return this.segmentsMatch(searchSeg, routeSeg);
+      });
+      if (matched) {
+        return true;
+      }
+    }
+
+    return false;
+  };
+
+  private normalizeSegment(segment: string): string {
+    return segment
+      .replace(/^\[\.\.\.(\w+)\]$/, "*$1") // [...param] -> *param
+      .replace(/^\[\[(\w+)\]\]$/, ":$1?") // [[param]] -> :param?
+      .replace(/^\[(\w+)=\w+\]$/, ":$1") // [param=matcher] -> :param
+      .replace(/^\[(\w+)\]$/, ":$1"); // [param] -> :param
+  }
+
+  private segmentsMatch(searchSeg: string, routeSeg: string): boolean {
+    if (!searchSeg || !routeSeg) {
+      return false;
+    }
+
+    // Normalize the route segment
+    const normalizedRouteSeg = this.normalizeSegment(routeSeg);
+
+    // If search segment starts with ':', treat it as looking for a parameter
+    if (searchSeg.startsWith(":")) {
+      const searchParamName = searchSeg.slice(1);
+      // Match if route segment is any type of parameter
+      return routeSeg.startsWith("[");
+    }
+
+    // For exact matches
+    if (searchSeg === normalizedRouteSeg) {
+      return true;
+    }
+
+    // For rest parameters
+    if (routeSeg.startsWith("[...")) {
+      return true;
+    }
+
+    // For normal parameters, require exact matches
+    if (routeSeg.startsWith("[")) {
+      return normalizedRouteSeg === searchSeg;
+    }
+
+    // For static segments, require exact matches
+    return searchSeg === routeSeg;
+  }
+
   private filterRoutes(routes: RouteItem[]): RouteItem[] {
     if (!this.searchPattern) {
       return routes;
     }
-
-    const searchSegments = this.searchPattern
-      .toLowerCase()
-      .split("/")
-      .filter(Boolean);
-
-    const matchesSearch = (
-      route: RouteItem,
-      isHierarchical: boolean
-    ): boolean => {
-      if (!isHierarchical) {
-        // Flat view - simple includes matching
-        const label =
-          typeof route.label === "string" ? route.label.toLowerCase() : "";
-        return (
-          label.includes(this.searchPattern) ||
-          route.routePath.toLowerCase().includes(this.searchPattern)
-        );
-      } else {
-        // Hierarchical view - path-based matching
-        const routeSegments = route.routePath
-          .toLowerCase()
-          .split("\\")
-          .filter(Boolean);
-
-        // Match any segment against search segments
-        return searchSegments.every((searchSeg) =>
-          routeSegments.some((routeSeg) => {
-            // Handle special route types
-            const normalizedRouteSeg = routeSeg
-              .replace(/^\[\.\.\.(\w+)\]$/, "*$1") // [...param] -> *param
-              .replace(/^\[\[(\w+)\]\]$/, ":$1?") // [[param]] -> :param?
-              .replace(/^\[(\w+)=\w+\]$/, ":$1") // [param=matcher] -> :param
-              .replace(/^\[(\w+)\]$/, ":$1") // [param] -> :param
-              .replace(/^\((.*?)\)$/, "$1"); // (group) -> group
-
-            return normalizedRouteSeg.includes(searchSeg);
-          })
-        );
-      }
-    };
 
     const filterHierarchical = (route: RouteItem): RouteItem | null => {
       // Always keep root level files and dividers for structure
@@ -560,7 +607,7 @@ export class RoutesProvider implements vscode.TreeDataProvider<RouteItem> {
       }
 
       // Check if current route matches
-      const currentMatches = matchesSearch(route, true);
+      const currentMatches = this.matchesSearch(route, true);
 
       // Filter children recursively
       const filteredChildren = route.children
@@ -598,7 +645,7 @@ export class RoutesProvider implements vscode.TreeDataProvider<RouteItem> {
           }
           currentGroup = route;
           currentGroupItems = [];
-        } else if (matchesSearch(route, false)) {
+        } else if (this.matchesSearch(route, false)) {
           currentGroupItems.push(route);
         }
       }
