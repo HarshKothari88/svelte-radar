@@ -51,6 +51,9 @@ export class RoutesProvider implements vscode.TreeDataProvider<RouteItem> {
     );
 
     vscode.window.onDidChangeActiveTextEditor(() => {
+      if(this.searchPattern) {
+        return; // Don't refresh if we're in search mode
+      }
       if (this.timeout) {
         clearTimeout(this.timeout);
       }
