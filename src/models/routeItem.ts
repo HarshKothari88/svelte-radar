@@ -12,7 +12,7 @@ export class RouteItem extends vscode.TreeItem {
     public routeType: RouteType,
     public isHierarchical: boolean = false,
     public resetInfo: ResetInfo | null = null,
-    public fileType: FileType = "page",
+    public fileType: FileType = "page"
   ) {
     super(
       label,
@@ -83,7 +83,10 @@ export class RouteItem extends vscode.TreeItem {
         } else if (fileName.includes(".server.")) {
           icon = "server";
           color = "charts.yellow"; // server-side files get yellow
-        } else if (fileName.includes(".ts") && !fileName.includes(".server.")) {
+        } else if (
+          (fileName.includes(".ts") || fileName.includes(".js")) &&
+          !fileName.includes(".server.")
+        ) {
           icon = "vm";
           color = "charts.blue"; // client-side TS files get blue
         } else if (fileName.includes("+layout.")) {
@@ -121,10 +124,8 @@ export class RouteItem extends vscode.TreeItem {
       // if active file then highlight the label
       const activeFilePath =
         vscode.window.activeTextEditor?.document.uri.fsPath;
-        
-      if (
-        filePath === activeFilePath
-      ) {
+
+      if (filePath === activeFilePath) {
         this.label = {
           label: this.label as string,
           highlights: [[0, (label as string).length]],
@@ -222,7 +223,9 @@ export class RouteItem extends vscode.TreeItem {
         parts.push("[error]");
       } else if (
         fileName.includes("+layout.ts") ||
-        fileName.includes("+page.ts")
+        fileName.includes("+page.ts") ||
+        fileName.includes("+layout.js") ||
+        fileName.includes("+page.js")
       ) {
         parts.push("[client]");
       } else if (fileName.includes("+layout.")) {

@@ -13,11 +13,11 @@ Svelte Radar is a Visual Studio Code extension designed to streamline your Svelt
 - **Complete Route Detection**: Automatically detects and displays all SvelteKit route files:
 
   - Pages (+page.svelte)
-  - Server-side logic (+page.server.ts)
-  - API endpoints (+server.ts)
+  - Server-side logic (+page.server.ts/js)
+  - API endpoints (+server.ts/js)
   - Layouts (+layout.svelte)
-  - Client-side logic (+layout.ts, +page.ts)
-  - Server layouts (+layout.server.ts)
+  - Client-side logic (+layout.ts/js, +page.ts/js)
+  - Server layouts (+layout.server.ts/js)
   - Error pages (+error.svelte)
   - Group layouts (+page@.svelte)
 
