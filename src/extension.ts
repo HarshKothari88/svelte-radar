@@ -1,17 +1,28 @@
 import * as vscode from 'vscode';
 import { RoutesProvider } from './providers/routesProvider';
 import { RouteItem } from './models/routeItem';
+import { PageContentProvider } from './providers/pageContentProvider';
+import { ContentItemType, PageContentItem } from './models/pageContentItem';
 import path from 'path';
 import fs from 'fs';
 
 export function activate(context: vscode.ExtensionContext) {
 	// Initialize the routes provider
 	const routesProvider = new RoutesProvider();
+	
+	// Initialize the page content provider
+	const pageContentProvider = new PageContentProvider();
 
-	// Create the tree view
-	const treeView = vscode.window.createTreeView('routesView', {
+	// Create the tree views
+	const routesTreeView = vscode.window.createTreeView('routesView', {
 		treeDataProvider: routesProvider,
 		showCollapseAll: true
+	});
+	
+	// Create the page content tree view
+	const pageContentTreeView = vscode.window.createTreeView('pageContentView', {
+		treeDataProvider: pageContentProvider,
+		showCollapseAll: false
 	});
 
 	const workspaceFolders = vscode.workspace.workspaceFolders;
@@ -112,6 +123,49 @@ export function activate(context: vscode.ExtensionContext) {
 				const newType = currentType === 'natural' ? 'basic' : 'natural';
 				await config.update('sortingType', newType, true);
 				routesProvider.refresh();
+			}
+		},
+		// Page content commands
+		{
+			command: 'svelteRadar.refreshPageContent',
+			callback: () => pageContentProvider.refresh()
+		},
+		{
+			command: 'svelteRadar.scrollToLine',
+			callback: (filePath: string, line: number) => {
+				// Open the file if not already open
+				vscode.workspace.openTextDocument(filePath)
+					.then(document => {
+						return vscode.window.showTextDocument(document);
+					})
+					.then(editor => {
+						// Create a range for the entire line
+						const range = new vscode.Range(
+							new vscode.Position(line, 0),
+							new vscode.Position(line, editor.document.lineAt(line).text.length)
+						);
+						
+						// Set the editor's selection to that range and reveal it
+						editor.selection = new vscode.Selection(range.start, range.end);
+						editor.revealRange(range, vscode.TextEditorRevealType.InCenter);
+					})
+					.then(undefined, (error: Error) => {
+						console.error('Error scrolling to line:', error);
+						vscode.window.showErrorMessage(`Could not scroll to line: ${error.message}`);
+					});
+			}
+		},
+		{
+			command: 'svelteRadar.openComponentFile',
+			callback: (item: PageContentItem) => {
+				if ((item.type === ContentItemType.Component || item.type === ContentItemType.ComponentInstance) && item.componentFilePath) {
+					vscode.workspace.openTextDocument(item.componentFilePath)
+						.then(document => vscode.window.showTextDocument(document))
+						.then(undefined, (error: Error) => {
+							console.error('Error opening component file:', error);
+							vscode.window.showErrorMessage(`Could not open component file: ${error.message}`);
+						});
+				}
 			}
 		}
 	];
