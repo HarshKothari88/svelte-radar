@@ -143,11 +143,11 @@
       "view/item/context": [
         {
           "command": "svelteRadar.openInBrowser",
-          "when": "view == routesView && !(viewItem == divider || viewItem == spacer)", 
+          "when": "view == routesView && !(viewItem == divider || viewItem == spacer)",
           "group": "inline"
         },
         {
-          "command": "svelteRadar.openFile", 
+          "command": "svelteRadar.openFile",
           "when": "view == routesView && !(viewItem == divider || viewItem == spacer)",
           "group": "inline"
         }
@@ -210,7 +210,9 @@
     "typescript": "^5.7.2"
   },
   "dependencies": {
+    "estree-walker": "^3.0.3",
     "glob": "^11.0.0",
-    "path": "^0.12.7"
+    "path": "^0.12.7",
+    "svelte": "^5.20.4"
   }
 }
