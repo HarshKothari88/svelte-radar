@@ -1,7 +1,8 @@
 import * as vscode from 'vscode';
 
 export enum ContentItemType {
-    Section = 'section',
+    SectionJS = 'sectionJS',
+    SectionHTML = 'sectionHTML',
     Component = 'component',
     ComponentInstance = 'componentInstance',
     Message = 'message'
@@ -50,8 +51,20 @@ export class PageContentItem extends vscode.TreeItem {
         }
 
         // Set icon based on type
-        let icon = type === ContentItemType.Section ? 'bookmark' : 'symbol-class';
-        let color = type === ContentItemType.Section ? 'charts.purple' : 'charts.green';
+        let icon, color;
+        
+        if (type === ContentItemType.SectionJS) {
+            icon = 'symbol-function';
+            color = 'charts.yellow';
+            this.description = 'JS Section';
+        } else if (type === ContentItemType.SectionHTML) {
+            icon = 'bookmark';
+            color = 'charts.purple';
+            this.description = 'Section';
+        } else { // Component
+            icon = 'symbol-class';
+            color = 'charts.green';
+        }
 
         // Set icon color based on content type
         this.iconPath = new vscode.ThemeIcon(icon, new vscode.ThemeColor(color));
@@ -59,19 +72,19 @@ export class PageContentItem extends vscode.TreeItem {
         // Set tooltip
         if (type === ContentItemType.Component && instances && instances.length > 0) {
             this.tooltip = `Component: ${label}\nInstances: ${instances.length}${componentFilePath ? '\nComponent File: ' + componentFilePath : ''}`;
+        } else if (type === ContentItemType.SectionJS) {
+            this.tooltip = `JS Section: ${label} (Line ${line})`;
+        } else if (type === ContentItemType.SectionHTML) {
+            this.tooltip = `HTML Section: ${label} (Line ${line})`;
         } else {
-            this.tooltip = type === ContentItemType.Section 
-                ? `Section: ${label} (Line ${line})`
-                : `Component: ${label} (Line ${line})${componentFilePath ? '\nComponent File: ' + componentFilePath : ''}`;
+            this.tooltip = `Component: ${label} (Line ${line})${componentFilePath ? '\nComponent File: ' + componentFilePath : ''}`;
         }
 
         // Set description based on type
         if (type === ContentItemType.Component && instances && instances.length > 1) {
             this.description = `${instances.length} instances${componentFilePath ? ' (File Available)' : ''}`;
-        } else {
-            this.description = type === ContentItemType.Section 
-                ? 'Section' 
-                : componentFilePath ? 'Component (File Available)' : 'Component';
+        } else if (type === ContentItemType.Component) {
+            this.description = componentFilePath ? 'Component (File Available)' : 'Component';
         }
 
         // Set command for direct click action

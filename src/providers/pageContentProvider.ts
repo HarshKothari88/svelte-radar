@@ -4,6 +4,13 @@ import * as path from 'path';
 import * as svelte from 'svelte/compiler';
 import { ContentItemType, PageContentItem } from '../models/pageContentItem';
 
+// Interface for cache entries
+interface CacheEntry {
+    items: PageContentItem[];
+    timestamp: number;
+    contentHash: string;
+}
+
 /**
  * Provider class for managing page content (sections and components) in the active file
  */
@@ -24,11 +31,18 @@ export class PageContentProvider implements vscode.TreeDataProvider<PageContentI
         0
     );
     private howToUseMessage = new PageContentItem(
-        'Add @sr titles with // @sr Title or <!-- @sr Title -->',
+        'Add @sr titles with <!-- @sr Title --> or // @sr Title for javascript',
         ContentItemType.Message,
         '',
         0
     );
+    
+    // Cache for page content to improve performance
+    private contentCache = new Map<string, CacheEntry>();
+    // Maximum cache age in milliseconds (5 minutes)
+    private maxCacheAge = 5 * 60 * 1000;
+    // Maximum cache size
+    private maxCacheSize = 20;
 
     constructor() {
         // Watch for active editor changes
@@ -37,13 +51,18 @@ export class PageContentProvider implements vscode.TreeDataProvider<PageContentI
         });
         
         // Watch for document changes
-        vscode.workspace.onDidChangeTextDocument(() => {
-            if (this.timeout) {
-                clearTimeout(this.timeout);
+        vscode.workspace.onDidChangeTextDocument((event) => {
+            // Only process if it's the active file
+            if (event.document.uri.fsPath === this.activeFilePath) {
+                if (this.timeout) {
+                    clearTimeout(this.timeout);
+                }
+                this.timeout = setTimeout(() => {
+                    // Invalidate cache for this file
+                    this.contentCache.delete(event.document.uri.fsPath);
+                    this.refresh();
+                }, 500); // Debounce refreshes
             }
-            this.timeout = setTimeout(() => {
-                this.refresh();
-            }, 500); // Debounce refreshes
         });
 
         // Initial check
@@ -51,6 +70,9 @@ export class PageContentProvider implements vscode.TreeDataProvider<PageContentI
 
         // Check if using Svelte 5
         this.checkSvelteVersion();
+        
+        // Set up cache cleanup interval
+        setInterval(() => this.cleanupCache(), 10 * 60 * 1000); // Clean up every 10 minutes
     }
 
     private async checkSvelteVersion() {
@@ -135,7 +157,15 @@ export class PageContentProvider implements vscode.TreeDataProvider<PageContentI
         }
 
         try {
+            // Check cache first
+            const cachedResult = this.checkCache(this.activeFilePath);
+            if (cachedResult) {
+                return cachedResult;
+            }
+            
+            // If not in cache, process the file
             const content = fs.readFileSync(this.activeFilePath, 'utf8');
+            const contentHash = this.hashContent(content);
             
             // We'll use this to store all content items in order
             const contentItems: Array<{
@@ -153,7 +183,7 @@ export class PageContentProvider implements vscode.TreeDataProvider<PageContentI
                 
                 if (jsSectionMatch) {
                     contentItems.push({
-                        type: ContentItemType.Section,
+                        type: ContentItemType.SectionJS,
                         name: jsSectionMatch[1].trim(),
                         line: i
                     });
@@ -180,13 +210,13 @@ export class PageContentProvider implements vscode.TreeDataProvider<PageContentI
                 }
                 
                 contentItems.push({
-                    type: ContentItemType.Section,
+                    type: ContentItemType.SectionHTML,
                     name: sectionName,
                     line: lineNumber
                 });
             }
             
-            // Find all component instances using multiple methods for reliability
+            // Find all component instances using Svelte's parser for reliability
             const componentItems = await this.findAllComponents(content);
             contentItems.push(...componentItems);
             
@@ -219,11 +249,11 @@ export class PageContentProvider implements vscode.TreeDataProvider<PageContentI
             const processedComponents = new Set<string>();
             
             for (const item of contentItems) {
-                if (item.type === ContentItemType.Section) {
+                if (item.type === ContentItemType.SectionJS || item.type === ContentItemType.SectionHTML) {
                     // Add sections directly
                     finalItems.push(new PageContentItem(
                         item.name,
-                        ContentItemType.Section,
+                        item.type,
                         this.activeFilePath,
                         item.line
                     ));
@@ -249,6 +279,9 @@ export class PageContentProvider implements vscode.TreeDataProvider<PageContentI
                     ));
                 }
             }
+            
+            // Cache the result
+            this.cacheResult(this.activeFilePath, finalItems, contentHash);
             
             return finalItems;
         } catch (error) {
@@ -459,6 +492,98 @@ export class PageContentProvider implements vscode.TreeDataProvider<PageContentI
             return [];
         }
     }
+
+     /**
+     * Check if we have a valid cached result for the file
+     */
+     private checkCache(filePath: string): PageContentItem[] | null {
+        const cacheEntry = this.contentCache.get(filePath);
+        if (!cacheEntry) {
+            return null;
+        }
+        
+        // Check if cache is still valid (not too old)
+        const now = Date.now();
+        if (now - cacheEntry.timestamp > this.maxCacheAge) {
+            this.contentCache.delete(filePath);
+            return null;
+        }
+        
+        // Check if file content has changed
+        try {
+            const content = fs.readFileSync(filePath, 'utf8');
+            const currentHash = this.hashContent(content);
+            
+            if (currentHash !== cacheEntry.contentHash) {
+                this.contentCache.delete(filePath);
+                return null;
+            }
+            
+            return cacheEntry.items;
+        } catch (error) {
+            // If there's an error reading the file, invalidate cache
+            this.contentCache.delete(filePath);
+            return null;
+        }
+    }
+    
+    /**
+     * Cache the result for future use
+     */
+    private cacheResult(filePath: string, items: PageContentItem[], contentHash: string): void {
+        // Ensure cache doesn't grow too large
+        if (this.contentCache.size >= this.maxCacheSize) {
+            // Find the oldest entry
+            let oldestPath = '';
+            let oldestTime = Date.now();
+            
+            for (const [path, entry] of this.contentCache.entries()) {
+                if (entry.timestamp < oldestTime) {
+                    oldestTime = entry.timestamp;
+                    oldestPath = path;
+                }
+            }
+            
+            // Remove the oldest entry
+            if (oldestPath) {
+                this.contentCache.delete(oldestPath);
+            }
+        }
+        
+        // Add new entry
+        this.contentCache.set(filePath, {
+            items,
+            timestamp: Date.now(),
+            contentHash
+        });
+    }
+    
+    /**
+     * Clean up old cache entries
+     */
+    private cleanupCache(): void {
+        const now = Date.now();
+        
+        for (const [path, entry] of this.contentCache.entries()) {
+            if (now - entry.timestamp > this.maxCacheAge) {
+                this.contentCache.delete(path);
+            }
+        }
+    }
+    
+    /**
+     * Create a simple hash of the content for cache validation
+     */
+    private hashContent(content: string): string {
+        let hash = 0;
+        for (let i = 0; i < content.length; i++) {
+            const char = content.charCodeAt(i);
+            hash = ((hash << 5) - hash) + char;
+            hash = hash & hash; // Convert to 32bit integer
+        }
+        return hash.toString(16);
+    }
+
 
     private getLineFromPosition(content: string, position: number): number {
         const lines = content.substring(0, position).split('\n');
