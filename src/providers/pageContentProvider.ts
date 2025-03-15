@@ -15,7 +15,7 @@ export class PageContentProvider implements vscode.TreeDataProvider<PageContentI
     // Updated to support both JS and HTML comments
     private sectionRegexJS = /\/\/\s*@sr\s+(.+)/i;
     private sectionRegexHTML = /<!--\s*@sr\s+(.+?)\s*-->/i;
-    private svelteComponentRegex = /<([A-Z][A-Za-z0-9_]*)[^>]*>/g;
+    private svelteComponentRegex = /<([A-Z][A-Za-z0-9_]+)(?:\s+[^>]*)?(?:\/?>|\/>)/g;
     private isSvelte5 = false;
     private noItemsMessage = new PageContentItem(
         'No sections or components found',
@@ -142,9 +142,7 @@ export class PageContentProvider implements vscode.TreeDataProvider<PageContentI
                 type: ContentItemType,
                 name: string,
                 line: number,
-                componentPath?: string,
-                componentName?: string,
-                instanceIndex?: number
+                componentPath?: string
             }> = [];
             
             // Find sections from JS comments
@@ -188,9 +186,9 @@ export class PageContentProvider implements vscode.TreeDataProvider<PageContentI
                 });
             }
             
-            // Find all component instances
-            const componentInstances = await this.findComponentInstances(content);
-            contentItems.push(...componentInstances);
+            // Find all component instances using multiple methods for reliability
+            const componentItems = await this.findAllComponents(content);
+            contentItems.push(...componentItems);
             
             // Sort all items by line number to maintain the exact order in the file
             contentItems.sort((a, b) => a.line - b.line);
@@ -206,13 +204,12 @@ export class PageContentProvider implements vscode.TreeDataProvider<PageContentI
             // First pass - build the component map
             contentItems.forEach((item, index) => {
                 if (item.type === ContentItemType.Component) {
-                    const key = item.componentName || item.name;
-                    if (!componentMap.has(key)) {
-                        componentMap.set(key, []);
+                    if (!componentMap.has(item.name)) {
+                        componentMap.set(item.name, []);
                     }
-                    componentMap.get(key)?.push({
+                    componentMap.get(item.name)?.push({
                         line: item.line,
-                        index: item.instanceIndex || 0
+                        index: componentMap.get(item.name)?.length || 0
                     });
                 }
             });
@@ -231,21 +228,19 @@ export class PageContentProvider implements vscode.TreeDataProvider<PageContentI
                         item.line
                     ));
                 } else if (item.type === ContentItemType.Component) {
-                    const key = item.componentName || item.name;
-                    
                     // Skip if we've already processed this component
-                    if (processedComponents.has(key)) {
+                    if (processedComponents.has(item.name)) {
                         continue;
                     }
                     
                     // Mark as processed
-                    processedComponents.add(key);
+                    processedComponents.add(item.name);
                     
                     // Get all instances for this component
-                    const instances = componentMap.get(key) || [];
+                    const instances = componentMap.get(item.name) || [];
                     
                     finalItems.push(new PageContentItem(
-                        key,
+                        item.name,
                         ContentItemType.Component,
                         this.activeFilePath,
                         item.line,
@@ -263,57 +258,156 @@ export class PageContentProvider implements vscode.TreeDataProvider<PageContentI
     }
 
     /**
-     * Find all component instances in the content
+     * Find all components using multiple methods for maximum reliability
      */
-    private async findComponentInstances(content: string): Promise<Array<{
+    private async findAllComponents(content: string): Promise<Array<{
         type: ContentItemType,
         name: string,
         line: number,
-        componentPath?: string,
-        componentName: string,
-        instanceIndex: number
+        componentPath?: string
     }>> {
+        // Combined results from all methods
+        const allComponents: Array<{
+            type: ContentItemType,
+            name: string,
+            line: number,
+            componentPath?: string
+        }> = [];
+        
         try {
-            // Try using Svelte's parser for more accurate detection
-            const result: Array<{
-                type: ContentItemType,
-                name: string,
-                line: number,
-                componentPath?: string,
-                componentName: string,
-                instanceIndex: number
-            }> = [];
-            
-            // Track instances of each component for proper indexing
-            const componentCounts: Record<string, number> = {};
-            
+            // Method 1: Try using Svelte's parser
             try {
-                const ast = svelte.parse(content);
-                await this.extractComponentsFromAst(ast, result, componentCounts, content);
-                
-                if (result.length > 0) {
-                    return result;
-                }
+                const svelteComponents = await this.findComponentsWithSvelteParser(content);
+                allComponents.push(...svelteComponents);
             } catch (error) {
                 console.error('Error using Svelte parser:', error);
             }
             
-            // Fallback to regex approach if Svelte parser fails
-            const lines = content.split('\n');
-            let match;
-            const regex = /<([A-Z][A-Za-z0-9_]*)[^>]*>/g;
+            // Method 2: Use regex to find components (as backup and to catch any missed by the parser)
+            const regexComponents = await this.findComponentsWithRegex(content);
             
-            while ((match = regex.exec(content)) !== null) {
+            // Merge results, avoiding duplicates
+            const existingLines = new Set(allComponents.map(c => `${c.name}:${c.line}`));
+            
+            for (const component of regexComponents) {
+                const key = `${component.name}:${component.line}`;
+                if (!existingLines.has(key)) {
+                    existingLines.add(key);
+                    allComponents.push(component);
+                }
+            }
+            
+            return allComponents;
+        } catch (error) {
+            console.error('Error finding components:', error);
+            return [];
+        }
+    }
+
+    /**
+     * Find components using Svelte's parser
+     */
+    private async findComponentsWithSvelteParser(content: string): Promise<Array<{
+        type: ContentItemType,
+        name: string,
+        line: number,
+        componentPath?: string
+    }>> {
+        const components: Array<{
+            type: ContentItemType,
+            name: string,
+            line: number,
+            componentPath?: string
+        }> = [];
+        
+        try {
+            const ast = svelte.parse(content);
+            
+            // Process HTML part
+            if (ast.html) {
+                await this.extractComponentsFromNode(ast.html, components, content);
+            }
+            
+            return components;
+        } catch (error) {
+            console.error('Error parsing with Svelte parser:', error);
+            return [];
+        }
+    }
+
+    /**
+     * Recursively extract components from AST nodes
+     */
+    private async extractComponentsFromNode(
+        node: any,
+        components: Array<{
+            type: ContentItemType,
+            name: string,
+            line: number,
+            componentPath?: string
+        }>,
+        content: string
+    ): Promise<void> {
+        if (!node) return;
+        
+        try {
+            // Check if the node is a component (starts with uppercase)
+            if (node.type === 'InlineComponent' && node.name && /^[A-Z]/.test(node.name)) {
+                const componentName = node.name;
+                const lineNumber = this.getLineFromPosition(content, node.start);
+                
+                // Find component file
+                const componentPath = await this.findComponentFile(componentName);
+                
+                components.push({
+                    type: ContentItemType.Component,
+                    name: componentName,
+                    line: lineNumber,
+                    componentPath
+                });
+            }
+            
+            // Process children recursively
+            if (node.children) {
+                for (const child of node.children) {
+                    await this.extractComponentsFromNode(child, components, content);
+                }
+            }
+        } catch (error) {
+            console.error('Error extracting component from node:', error);
+        }
+    }
+
+    /**
+     * Find components using regex as a fallback method
+     */
+    private async findComponentsWithRegex(content: string): Promise<Array<{
+        type: ContentItemType,
+        name: string,
+        line: number,
+        componentPath?: string
+    }>> {
+        const components: Array<{
+            type: ContentItemType,
+            name: string,
+            line: number,
+            componentPath?: string
+        }> = [];
+        
+        try {
+            const lines = content.split('\n');
+            
+            // Reset regex
+            this.svelteComponentRegex.lastIndex = 0;
+            
+            // Find all component tags
+            let match;
+            while ((match = this.svelteComponentRegex.exec(content)) !== null) {
                 const componentName = match[1];
                 
+                // Ensure it's a component (starts with uppercase)
                 if (/^[A-Z]/.test(componentName)) {
-                    // Track instance count
-                    if (!componentCounts[componentName]) {
-                        componentCounts[componentName] = 0;
-                    }
-                    const instanceIndex = componentCounts[componentName]++;
-                    
-                    // Find line number of the match
+                    // Calculate line number
                     const matchPosition = match.index;
                     let lineNumber = 0;
                     let charPosition = 0;
@@ -326,110 +420,43 @@ export class PageContentProvider implements vscode.TreeDataProvider<PageContentI
                         }
                     }
                     
-                    // Find component file in workspace
+                    // Find component file
                     const componentPath = await this.findComponentFile(componentName);
                     
-                    result.push({
+                    components.push({
                         type: ContentItemType.Component,
                         name: componentName,
                         line: lineNumber,
-                        componentPath,
-                        componentName,
-                        instanceIndex
+                        componentPath
                     });
                 }
             }
             
-            return result;
+            // Also try line-by-line regex for better reliability
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i];
+                const lineComponentRegex = /<([A-Z][A-Za-z0-9_]+)(?:\s+[^>]*)?(?:\/?>|\/>)/g;
+                
+                let lineMatch;
+                while ((lineMatch = lineComponentRegex.exec(line)) !== null) {
+                    const componentName = lineMatch[1];
+                    
+                    // Find component file
+                    const componentPath = await this.findComponentFile(componentName);
+                    
+                    components.push({
+                        type: ContentItemType.Component,
+                        name: componentName,
+                        line: i,
+                        componentPath
+                    });
+                }
+            }
+            
+            return components;
         } catch (error) {
-            console.error('Error finding component instances:', error);
+            console.error('Error finding components with regex:', error);
             return [];
-        }
-    }
-
-    private async extractComponentsFromAst(
-        ast: any,
-        results: Array<{
-            type: ContentItemType,
-            name: string,
-            line: number,
-            componentPath?: string,
-            componentName: string,
-            instanceIndex: number
-        }>,
-        componentCounts: Record<string, number>,
-        content: string
-    ) {
-        try {
-            // Process HTML part
-            if (ast.html) {
-                await this.traverseAst(ast.html, results, componentCounts, content);
-            }
-            
-            // Process instance part (script)
-            if (ast.instance) {
-                await this.traverseAst(ast.instance, results, componentCounts, content);
-            }
-            
-            // Process module part (script context="module")
-            if (ast.module) {
-                await this.traverseAst(ast.module, results, componentCounts, content);
-            }
-        } catch (error) {
-            console.error('Error extracting components from AST:', error);
-        }
-    }
-
-    private async traverseAst(
-        ast: any,
-        results: Array<{
-            type: ContentItemType,
-            name: string,
-            line: number,
-            componentPath?: string,
-            componentName: string,
-            instanceIndex: number
-        }>,
-        componentCounts: Record<string, number>,
-        content: string
-    ) {
-        if (!ast) return;
-        
-        try {
-            // Check if the node is a component (start with uppercase)
-            if (ast.type === 'InlineComponent' && ast.name && /^[A-Z]/.test(ast.name)) {
-                const componentName = ast.name;
-                
-                // Track instance count
-                if (!componentCounts[componentName]) {
-                    componentCounts[componentName] = 0;
-                }
-                const instanceIndex = componentCounts[componentName]++;
-                
-                // Get the line number 
-                const lineNumber = this.getLineFromPosition(content, ast.start);
-                
-                // Find component file in workspace
-                const componentPath = await this.findComponentFile(componentName);
-                
-                results.push({
-                    type: ContentItemType.Component,
-                    name: componentName,
-                    line: lineNumber,
-                    componentPath,
-                    componentName,
-                    instanceIndex
-                });
-            }
-            
-            // Recursively process children
-            if (ast.children) {
-                for (const child of ast.children) {
-                    await this.traverseAst(child, results, componentCounts, content);
-                }
-            }
-        } catch (error) {
-            console.error('Error traversing AST:', error);
         }
     }
 
