@@ -42,7 +42,8 @@ export function activate(context: vscode.ExtensionContext) {
                     fs.mkdirSync(configDir, { recursive: true });
                     fs.writeFileSync(configPath, JSON.stringify({
                         projectRoot: "frontend/",
-						port: 5173
+						port: 5173,
+						enablePageContentView: true
                     }, null, 2));
                     
                     vscode.workspace.openTextDocument(configPath)
