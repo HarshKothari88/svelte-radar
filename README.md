@@ -21,6 +21,13 @@ Svelte Radar is a Visual Studio Code extension designed to streamline your Svelt
   - Error pages (+error.svelte)
   - Group layouts (+page@.svelte)
 
+- **[NEW] Page Content Navigator**: Quickly navigate within Svelte files:
+  - Tagged sections for easy navigation
+  - Automatic component detection
+  - Direct navigation to component definitions
+  - Component instance grouping
+  - [View Example](./examples/PageContentExample.svelte)
+
 - **Smart Route Organization**:
 
   - Hierarchical view for structured navigation
@@ -75,6 +82,42 @@ Examples:
 3. Optional parameters with groups:
    /(docs)/[[lang]]/api/[[version]]/reference/+page.svelte
 
+### Page Content Navigator
+
+The Page Content Navigator helps you quickly navigate within your Svelte files by providing a structured view of sections and components.
+
+#### Adding Section Markers
+
+Add section markers in your code to create navigation points:
+
+- For JavaScript/TypeScript sections:
+  ```js
+  // @sr My Section Name
+  ```
+
+- For HTML sections:
+  ```html
+  <!-- @sr My Section Name -->
+  ```
+
+#### Component Navigation
+
+Components are automatically detected and displayed in the Page Content view:
+- Click on a component to navigate to its usage in the current file
+- For components with multiple instances, expand to see all occurrences
+- Use the "Open Component File" action to jump directly to the component definition
+
+#### Configuration
+
+You can enable or disable the Page Content Navigator in your workspace configuration:
+
+```json
+// .vscode/svelte-radar.json
+{
+  "enablePageContentView": true  // Set to false to disable
+}
+```
+
 ### Route Types at a Glance
 
 - 🟢 Static Routes (/about, /contact)
@@ -117,7 +160,8 @@ Create `.vscode/svelte-radar.json` in your workspace:
 ```json
 {
   "projectRoot": "frontend/", // For monorepos or custom project locations. by default it uses the current workspace root.
-  "port": 5173 // Dev server port (optional)
+  "port": 5173, // Dev server port (optional)
+  "enablePageContentView": true // Enable/disable Page Content Navigator (optional, defaults to true)
 }
 ```
 
@@ -143,3 +187,7 @@ basic: Standard string comparison
 ## Hierarchical View
 
 ![image](https://github.com/user-attachments/assets/64d36548-9af6-4ca5-a5f1-04f58e5b83f9)
+
+## Page Content Navigator
+
+![image](https://github.com/user-attachments/assets/9768c22f-fac7-4477-9f01-9a61f4701d10)
