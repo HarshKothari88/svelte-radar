@@ -2,6 +2,22 @@
 
 All notable changes to the "Svelte Radar" extension will be documented in this file.
 
+## [1.1.0] - 2025-03-16
+
+### Added
+- New Page Content Navigator feature:
+  - Navigate within Svelte files using tagged sections
+  - Automatic component detection and navigation
+  - Direct navigation to component definitions
+  - Component instance grouping for multiple occurrences
+  - Section tagging with `// @sr Section Name` for JS/TS and `<!-- @sr Section Name -->` for HTML
+- Workspace configuration option to enable/disable Page Content Navigator:
+  - Add `"enablePageContentView": true|false` to `.vscode/svelte-radar.json`
+
+### Improved
+- Enhanced component detection using Svelte's parser
+- Implemented caching for better performance
+
 ## [1.0.4] - 2025-02-09
 
 ### Improved
