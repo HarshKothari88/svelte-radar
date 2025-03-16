@@ -311,19 +311,19 @@ export class RoutesProvider implements vscode.TreeDataProvider<RouteItem> {
           fileType: "page",
           resetInfo: null,
         });
-      } else if (file.startsWith("+page.ts")) {
+      } else if (file.startsWith("+page.ts") || file.startsWith("+page.js")) {
         fileInfos.push({
           filePath: path.join(dir, file),
           fileType: "pageClient",
           resetInfo: null,
         });
-      } else if (file.startsWith("+page.server.ts")) {
+      } else if (file.startsWith("+page.server.ts") || file.startsWith("+page.server.js")) {
         fileInfos.push({
           filePath: path.join(dir, file),
           fileType: "pageServer",
           resetInfo: null,
         });
-      } else if (file.startsWith("+server.ts")) {
+      } else if (file.startsWith("+server.ts") || file.startsWith("+server.js")) {
         fileInfos.push({
           filePath: path.join(dir, file),
           fileType: "server",
@@ -335,13 +335,13 @@ export class RoutesProvider implements vscode.TreeDataProvider<RouteItem> {
           fileType: "layout",
           resetInfo: null,
         });
-      } else if (file.startsWith("+layout.ts")) {
+      } else if (file.startsWith("+layout.ts") || file.startsWith("+layout.js")) {
         fileInfos.push({
           filePath: path.join(dir, file),
           fileType: "layoutClient",
           resetInfo: null,
         });
-      } else if (file.startsWith("+layout.server.ts")) {
+      } else if (file.startsWith("+layout.server.ts") || file.startsWith("+layout.server.js")) {
         fileInfos.push({
           filePath: path.join(dir, file),
           fileType: "layoutServer",
